@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        GPS Tracker Simulator
+    </title>
+
+    <style>
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        input {
+            width: 220px;
+            padding: 10px;
+            margin: 5px;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+        }
+
+        .create-btn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .start-btn {
+            background: #2196F3;
+            color: white;
+        }
+
+        .stop-btn {
+            background: #f44336;
+            color: white;
+        }
+
+        .deviation-btn {
+            background: #ff9800;
+            color: white;
+        }
+
+        .status {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        #logs {
+            background: black;
+            color: #00ff00;
+            padding: 10px;
+            height: 350px;
+            overflow-y: auto;
+            border-radius: 10px;
+            font-family: monospace;
+        }
+
+        .slider-container {
+            margin-top: 15px;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <h1>
+        GPS Tracker Simulator
+    </h1>
+
+    <div class="card">
+
+        <h2>
+            Coordonnées Point A
+        </h2>
+
+        <input
+            id="startLat"
+            type="number"
+            step="any"
+            placeholder="Latitude A"
+            value="-18.8792"
+        >
+
+        <input
+            id="startLon"
+            type="number"
+            step="any"
+            placeholder="Longitude A"
+            value="47.5079"
+        >
+
+        <h2>
+            Coordonnées Point B
+        </h2>
+
+        <input
+            id="endLat"
+            type="number"
+            step="any"
+            placeholder="Latitude B"
+            value="-18.8850"
+        >
+
+        <input
+            id="endLon"
+            type="number"
+            step="any"
+            placeholder="Longitude B"
+            value="47.5150"
+        >
+
+        <br><br>
+
+        <button
+            class="create-btn"
+            onclick="createRoute()"
+        >
+            Créer Trajet
+        </button>
+
+        <button
+            class="start-btn"
+            onclick="startSimulation()"
+        >
+            Démarrer
+        </button>
+
+        <button
+            class="stop-btn"
+            onclick="stopSimulation()"
+        >
+            Stop
+        </button>
+
+        <button
+            class="deviation-btn"
+            onclick="simulateDeviation()"
+        >
+            Déviation
+        </button>
+
+        <div class="slider-container">
+
+            <label>
+                Vitesse simulation :
+            </label>
+
+            <input
+                type="range"
+                min="200"
+                max="3000"
+                value="1000"
+                id="speedSlider"
+            >
+
+            <span id="speedValue">
+                1000 ms
+            </span>
+
+        </div>
+
+        <div class="status" id="status">
+            Statut : En attente
+        </div>
+
+    </div>
+
+    <div class="card">
+
+        <h2>
+            Logs
+        </h2>
+
+        <div id="logs"></div>
+
+    </div>
+
+<script>
+
+let generatedRoute = []
+
+let routeId = null
+let sessionId = null
+
+let currentIndex = 0
+
+let interval = null
+
+let deviationMode = false
+let deviationTriggered = false
+
+// =====================================================
+// LOGS
+// =====================================================
+
+function log(message) {
+
+    const logs =
+        document.getElementById("logs")
+
+    logs.innerHTML += `
+        <div>
+            ${new Date().toLocaleTimeString()}
+            :
+            ${message}
+        </div>
+    `
+
+    logs.scrollTop = logs.scrollHeight
+}
+
+// =====================================================
+// STATUS
+// =====================================================
+
+function setStatus(text) {
+
+    document.getElementById(
+        "status"
+    ).innerText =
+        "Statut : " + text
+}
+
+// =====================================================
+// SPEED
+// =====================================================
+
+const speedSlider =
+    document.getElementById("speedSlider")
+
+speedSlider.addEventListener("input", () => {
+
+    document.getElementById(
+        "speedValue"
+    ).innerText =
+        speedSlider.value + " ms"
+})
+
+// =====================================================
+// GENERATION ROUTE
+// =====================================================
+
+function generateRoute(
+    startLat,
+    startLon,
+    endLat,
+    endLon,
+    steps = 40
+) {
+
+    let points = []
+
+    for(let i = 0; i <= steps; i++) {
+
+        const ratio = i / steps
+
+        const lat =
+            startLat +
+            (endLat - startLat) * ratio
+
+        const lon =
+            startLon +
+            (endLon - startLon) * ratio
+
+        points.push({
+            latitude: lat,
+            longitude: lon
+        })
+    }
+
+    return points
+}
+
+// =====================================================
+// CREATION ROUTE
+// =====================================================
+
+async function createRoute() {
+
+    const startLat =
+        parseFloat(
+            document.getElementById(
+                "startLat"
+            ).value
+        )
+
+    const startLon =
+        parseFloat(
+            document.getElementById(
+                "startLon"
+            ).value
+        )
+
+    const endLat =
+        parseFloat(
+            document.getElementById(
+                "endLat"
+            ).value
+        )
+
+    const endLon =
+        parseFloat(
+            document.getElementById(
+                "endLon"
+            ).value
+        )
+
+    generatedRoute = generateRoute(
+        startLat,
+        startLon,
+        endLat,
+        endLon
+    )
+
+    log(
+        "Route générée avec " +
+        generatedRoute.length +
+        " points"
+    )
+
+    const response = await fetch(
+        "/routes/create",
+        {
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+
+            body: JSON.stringify({
+
+                user_id: "anna",
+
+                route_name:
+                    "Maison -> Université",
+
+                points:
+                    generatedRoute
+            })
+        }
+    )
+
+    const data = await response.json()
+
+    console.log(data)
+
+    routeId = data.route_id
+
+    log("Route ID : " + routeId)
+
+    setStatus("Trajet créé")
+}
+
+// =====================================================
+// DEMARRAGE SIMULATION
+// =====================================================
+
+async function startSimulation() {
+
+    if(!routeId) {
+
+        log("Crée un trajet d'abord")
+
+        return
+    }
+
+    currentIndex = 0
+
+    deviationMode = false
+    deviationTriggered = false
+
+    const firstPoint =
+        generatedRoute[0]
+
+    const response = await fetch(
+        `/tracking/start/${routeId}`,
+        {
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+
+            body: JSON.stringify({
+
+                user_id: "anna",
+
+                latitude:
+                    firstPoint.latitude,
+
+                longitude:
+                    firstPoint.longitude
+            })
+        }
+    )
+
+    const data = await response.json()
+
+    console.log(data)
+
+    sessionId = data.session_id
+
+    log("Session créée")
+    log("Session ID : " + sessionId)
+
+    setStatus("Simulation active")
+
+    const speed =
+        parseInt(speedSlider.value)
+
+    interval = setInterval(
+        sendPosition,
+        speed
+    )
+}
+
+// =====================================================
+// ENVOI POSITION
+// =====================================================
+
+async function sendPosition() {
+
+    if(currentIndex >= generatedRoute.length) {
+
+        clearInterval(interval)
+
+        log("Trajet terminé")
+
+        setStatus("Trajet terminé")
+
+        return
+    }
+
+    let point =
+        generatedRoute[currentIndex]
+
+    // =================================================
+    // DEVIATION PROGRESSIVE
+    // =================================================
+
+    if(deviationMode) {
+
+        const deviationStrength =
+            currentIndex * 0.00015
+
+        point = {
+
+            latitude:
+                point.latitude +
+                deviationStrength,
+
+            longitude:
+                point.longitude +
+                deviationStrength
+        }
+    }
+
+    const response = await fetch(
+        `/tracking/update/${sessionId}`,
+        {
+            method: "POST",
+
+            headers: {
+                "Content-Type":
+                    "application/json"
+            },
+
+            body: JSON.stringify({
+
+                user_id: "anna",
+
+                latitude:
+                    point.latitude,
+
+                longitude:
+                    point.longitude
+            })
+        }
+    )
+
+    const data = await response.json()
+
+    console.log(data)
+
+    log(
+        `
+        GPS :
+        ${point.latitude.toFixed(6)},
+        ${point.longitude.toFixed(6)}
+        `
+    )
+
+    log(
+        `
+        Distance route :
+        ${data.distance_from_route} m
+        `
+    )
+
+    if(data.alert) {
+
+        log(
+            `
+            🚨 ${data.alert}
+            `
+        )
+
+        setStatus("ALERTE")
+    }
+
+    currentIndex++
+}
+
+// =====================================================
+// STOP
+// =====================================================
+
+function stopSimulation() {
+
+    clearInterval(interval)
+
+    setStatus("Simulation arrêtée")
+
+    log("Simulation stoppée")
+}
+
+// =====================================================
+// DEVIATION
+// =====================================================
+
+function simulateDeviation() {
+
+    if(deviationTriggered) {
+
+        log("Déviation déjà active")
+
+        return
+    }
+
+    deviationMode = true
+
+    deviationTriggered = true
+
+    log(
+        "🚨 DÉVIATION GPS ACTIVÉE"
+    )
+
+    setStatus(
+        "Déviation progressive active"
+    )
+}
+
+</script>
+
+</body>
+</html>
