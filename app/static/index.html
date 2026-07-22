@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Safe Route Tracker Test Panel</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #4fc3f7;
+    }
+
+    .section {
+      background: #1e1e1e;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+    }
+
+    input, textarea, button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    input, textarea {
+      background: #2c2c2c;
+      color: white;
+    }
+
+    button {
+      background: #4fc3f7;
+      color: black;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    pre {
+      background: black;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 6px;
+      margin-top: 10px;
+      color: #00ff90;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Safe Route Tracker API Tester</h1>
+
+<!-- ========================= -->
+<!-- GLOBAL -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Configuration</h2>
+
+  <input id="baseUrl" value="http://127.0.0.1:8000" />
+
+  <textarea id="jwtToken" rows="4" placeholder="JWT Token"></textarea>
+</div>
+
+<!-- ========================= -->
+<!-- REGISTER -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Register</h2>
+
+  <input id="registerEmail" placeholder="Email" />
+  <input id="registerPassword" placeholder="Password" type="password" />
+
+  <button onclick="register()">Register</button>
+
+  <pre id="registerResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- LOGIN -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Login</h2>
+
+  <input id="loginEmail" placeholder="Email" />
+  <input id="loginPassword" placeholder="Password" type="password" />
+
+  <button onclick="login()">Login</button>
+
+  <pre id="loginResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- CREATE PROFILE -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Create Profile</h2>
+
+  <input id="profileName" placeholder="Full Name" />
+  <input id="profilePhone" placeholder="Phone Number" />
+  <input id="profileAge" placeholder="Age" type="number" />
+
+  <button onclick="createProfile()">Create Profile</button>
+
+  <pre id="profileResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- MY PROFILE -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>My Profile</h2>
+
+  <button onclick="getProfile()">Get My Profile</button>
+
+  <pre id="myProfileResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- REGISTER DEVICE -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Register Device</h2>
+
+  <input id="deviceToken" placeholder="Device Token" />
+  <input id="devicePlatform" placeholder="android / ios / web" />
+
+  <button onclick="registerDevice()">Register Device</button>
+
+  <pre id="deviceResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- MY DEVICES -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>My Devices</h2>
+
+  <button onclick="getDevices()">Get Devices</button>
+
+  <pre id="devicesResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- ADD EMERGENCY CONTACT -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>Add Emergency Contact</h2>
+
+  <input id="contactName" placeholder="Full Name" />
+  <input id="contactPhone" placeholder="Phone Number" />
+  <input id="contactRelationship" placeholder="mother / father / brother..." />
+
+  <button onclick="addContact()">Add Contact</button>
+
+  <pre id="contactResult"></pre>
+</div>
+
+<!-- ========================= -->
+<!-- MY CONTACTS -->
+<!-- ========================= -->
+
+<div class="section">
+  <h2>My Contacts</h2>
+
+  <button onclick="getContacts()">Get Contacts</button>
+
+  <pre id="contactsResult"></pre>
+</div>
+
+<script>
+
+function getBaseUrl() {
+  return document.getElementById("baseUrl").value;
+}
+
+function getToken() {
+  return document.getElementById("jwtToken").value;
+}
+
+async function apiRequest(endpoint, method, body = null) {
+
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  const token = getToken();
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(
+    getBaseUrl() + endpoint,
+    {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : null
+    }
+  );
+
+  return response.json();
+}
+
+async function register() {
+
+  const data = await apiRequest(
+    "/auth/register",
+    "POST",
+    {
+      email: document.getElementById("registerEmail").value,
+      password: document.getElementById("registerPassword").value
+    }
+  );
+
+  document.getElementById("registerResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function login() {
+
+  const data = await apiRequest(
+    "/auth/login",
+    "POST",
+    {
+      email: document.getElementById("loginEmail").value,
+      password: document.getElementById("loginPassword").value
+    }
+  );
+
+  if (data.access_token) {
+    document.getElementById("jwtToken").value =
+      data.access_token;
+  }
+
+  document.getElementById("loginResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function createProfile() {
+
+  const data = await apiRequest(
+    "/profile/create",
+    "POST",
+    {
+      full_name: document.getElementById("profileName").value,
+      phone_number: document.getElementById("profilePhone").value,
+      age: parseInt(document.getElementById("profileAge").value)
+    }
+  );
+
+  document.getElementById("profileResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function getProfile() {
+
+  const data = await apiRequest(
+    "/profile/me",
+    "GET"
+  );
+
+  document.getElementById("myProfileResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function registerDevice() {
+
+  const data = await apiRequest(
+    "/notifications/register-device",
+    "POST",
+    {
+      token: document.getElementById("deviceToken").value,
+      platform: document.getElementById("devicePlatform").value
+    }
+  );
+
+  document.getElementById("deviceResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function getDevices() {
+
+  const data = await apiRequest(
+    "/notifications/my-devices",
+    "GET"
+  );
+
+  document.getElementById("devicesResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function addContact() {
+
+  const data = await apiRequest(
+    "/emergency-contacts/add",
+    "POST",
+    {
+      full_name: document.getElementById("contactName").value,
+      phone_number: document.getElementById("contactPhone").value,
+      relationship: document.getElementById("contactRelationship").value
+    }
+  );
+
+  document.getElementById("contactResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+async function getContacts() {
+
+  const data = await apiRequest(
+    "/emergency-contacts/my-contacts",
+    "GET"
+  );
+
+  document.getElementById("contactsResult").textContent =
+    JSON.stringify(data, null, 2);
+}
+
+</script>
+
+</body>
+</html>
