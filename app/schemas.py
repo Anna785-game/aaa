@@ -1,3 +1,5 @@
+#schemas.py
+
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -52,6 +54,3 @@ class EmergencyContactCreate(BaseModel):
     phone_number: str
     relationship: str
 
-
-class EmergencyContactConfirm(BaseModel):
-    verification_code: str

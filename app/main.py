@@ -1,11 +1,12 @@
+#main.py
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer
 from fastapi.openapi.utils import get_openapi
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from .limiter import limiter
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
@@ -21,9 +22,6 @@ from .routes import (
 
 app = FastAPI()
 security = HTTPBearer()
-limiter = Limiter(
-    key_func=get_remote_address
-)
 
 app.state.limiter = limiter
 

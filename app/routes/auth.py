@@ -1,7 +1,8 @@
+#auth.py
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
-from ..main import limiter
+from ..limiter import limiter
 
 from ..database import supabase
 from ..schemas import UserAuth

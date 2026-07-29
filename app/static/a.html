@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="theme-color" content="#0b1220">
+<title>Safe Route</title>
+<style>
+  :root {
+    --ink: #0b1220;
+    --panel: #121b2e;
+    --panel-2: #16203a;
+    --panel-raised: #1a2540;
+    --line: #24304a;
+    --text: #e8ecf6;
+    --text-dim: #8791a8;
+    --text-faint: #5b6478;
+    --signal: #35d0ba;
+    --signal-dim: #163a35;
+    --amber: #f5a623;
+    --amber-dim: #3a2c10;
+    --red: #ef5164;
+    --red-dim: #3a1620;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--ink); color: var(--text);
+    font-family: var(--sans);
+    overscroll-behavior-y: contain;
+  }
+  body {
+    display: flex; flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+  button { font-family: inherit; }
+  input, select { font-family: inherit; }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    padding: max(18px, env(safe-area-inset-top)) 20px 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    background: var(--ink);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .topbar .wordmark {
+    font-size: 15px; font-weight: 700; letter-spacing: 0.2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .wordmark .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--signal);
+    box-shadow: 0 0 0 3px var(--signal-dim);
+  }
+  .topbar .screen-title { font-size: 13px; color: var(--text-dim); }
+
+  /* ===== MAIN ===== */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 20px calc(90px + env(safe-area-inset-bottom)) 20px;
+  }
+  main.no-nav { padding-bottom: 24px; }
+
+  /* ===== BOTTOM NAV ===== */
+  .bottomnav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex;
+    background: rgba(18, 27, 46, 0.92);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) 8px;
+    z-index: 30;
+  }
+  .navbtn {
+    flex: 1; background: none; border: none; color: var(--text-faint);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px 0; cursor: pointer; font-size: 10.5px; letter-spacing: 0.2px;
+    border-radius: 10px;
+  }
+  .navbtn .ic { font-size: 19px; line-height: 1; }
+  .navbtn.active { color: var(--signal); }
+
+  /* ===== TYPO ===== */
+  h1.page-title { font-size: 22px; font-weight: 800; margin: 4px 0 4px 0; letter-spacing: -0.3px; }
+  p.page-sub { font-size: 13px; color: var(--text-dim); margin: 0 0 22px 0; line-height: 1.5; }
+  .section-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-faint); margin: 26px 0 10px 0; font-weight: 700;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card-row { display: flex; align-items: center; justify-content: space-between; }
+  .card-title { font-size: 15px; font-weight: 700; margin: 0 0 2px 0; }
+  .card-sub { font-size: 12.5px; color: var(--text-dim); margin: 0; }
+  .empty {
+    text-align: center; padding: 40px 20px; color: var(--text-faint); font-size: 13px;
+    border: 1px dashed var(--line); border-radius: 16px; line-height: 1.6;
+  }
+
+  .badge {
+    font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    letter-spacing: 0.3px;
+  }
+  .badge.sensitive { background: var(--amber-dim); color: var(--amber); }
+  .badge.normal { background: var(--panel-raised); color: var(--text-dim); }
+  .badge.linked { background: var(--signal-dim); color: var(--signal); }
+  .badge.unlinked { background: var(--panel-raised); color: var(--text-faint); }
+
+  /* ===== FORM ===== */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field input, .field select {
+    width: 100%; background: var(--panel-raised); border: 1px solid var(--line);
+    color: var(--text); padding: 13px 14px; border-radius: 12px; font-size: 15px;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--signal); }
+  .field .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--panel-raised); border: 1px solid var(--line);
+    border-radius: 12px; padding: 13px 14px;
+  }
+  .switch { position: relative; width: 42px; height: 25px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute; inset: 0; background: var(--line); border-radius: 20px; transition: .15s;
+  }
+  .switch .track:before {
+    content: ""; position: absolute; width: 19px; height: 19px; left: 3px; top: 3px;
+    background: var(--text-dim); border-radius: 50%; transition: .15s;
+  }
+  .switch input:checked + .track { background: var(--signal-dim); }
+  .switch input:checked + .track:before { transform: translateX(17px); background: var(--signal); }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    width: 100%; border: none; border-radius: 13px; padding: 15px;
+    font-size: 15px; font-weight: 700; cursor: pointer; text-align: center;
+  }
+  .btn.primary { background: var(--signal); color: #06231e; }
+  .btn.danger { background: var(--red); color: #2c0810; }
+  .btn.ghost { background: var(--panel-raised); color: var(--text); border: 1px solid var(--line); }
+  .btn.amber { background: var(--amber); color: #2c1c04; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+  .link-btn {
+    background: none; border: none; color: var(--signal); font-size: 13px;
+    font-weight: 600; cursor: pointer; padding: 4px 0;
+  }
+
+  /* ===== AUTH ===== */
+  .auth-wrap { padding-top: 8vh; }
+  .auth-hero { text-align: center; margin-bottom: 34px; }
+  .auth-hero .glyph {
+    width: 64px; height: 64px; margin: 0 auto 16px auto;
+    border-radius: 20px; background: var(--signal-dim);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  .auth-hero h1 { font-size: 21px; margin: 0 0 6px 0; font-weight: 800; }
+  .auth-hero p { font-size: 13px; color: var(--text-dim); margin: 0; }
+  .auth-tabs { display: flex; gap: 6px; background: var(--panel); border-radius: 12px; padding: 4px; margin-bottom: 20px; }
+  .auth-tab { flex: 1; text-align: center; padding: 9px; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--text-faint); cursor: pointer; }
+  .auth-tab.active { background: var(--panel-raised); color: var(--text); }
+
+  /* ===== TRACKING SIGNAL RING ===== */
+  .signal-stage { display: flex; flex-direction: column; align-items: center; padding: 10px 0 24px 0; }
+  .ring-wrap { position: relative; width: 210px; height: 210px; margin-bottom: 18px; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: var(--panel-raised); stroke-width: 10; }
+  .ring-fg { fill: none; stroke: var(--signal); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease, stroke 0.3s ease; }
+  .ring-center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .ring-center .score { font-size: 40px; font-weight: 800; letter-spacing: -1px; }
+  .ring-center .score-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+  .pulse-dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--signal);
+    display: inline-block; margin-right: 6px; animation: pulse 1.6s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(53,208,186,0.55); }
+    70% { box-shadow: 0 0 0 9px rgba(53,208,186,0); }
+    100% { box-shadow: 0 0 0 0 rgba(53,208,186,0); }
+  }
+  .status-line { font-size: 13px; color: var(--text-dim); text-align: center; margin-bottom: 4px; }
+  .status-line.warn { color: var(--amber); }
+  .status-line.emergency { color: var(--red); }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0; }
+  .stat-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat-box .v { font-size: 18px; font-weight: 800; }
+  .stat-box .l { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 2px; }
+
+  .alert-item {
+    border-left: 3px solid var(--amber); background: var(--amber-dim);
+    border-radius: 0 10px 10px 0; padding: 10px 12px; margin-bottom: 8px; font-size: 12.5px;
+  }
+  .alert-item.emergency { border-left-color: var(--red); background: var(--red-dim); }
+  .alert-item .t { font-size: 10px; color: var(--text-faint); margin-top: 3px; }
+
+  .rec-points-count {
+    font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+  }
+
+  /* ===== TOAST ===== */
+  #toastHost { position: fixed; left: 20px; right: 20px; bottom: calc(100px + env(safe-area-inset-bottom)); z-index: 100; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast {
+    background: var(--panel-raised); border: 1px solid var(--line); color: var(--text);
+    padding: 12px 15px; border-radius: 12px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: toastIn 0.25s ease;
+  }
+  .toast.error { border-color: #4a1c26; background: var(--red-dim); color: #ffcdd6; }
+  .toast.success { border-color: #164a3f; background: var(--signal-dim); color: #b6f2e6; }
+  @keyframes toastIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  .contact-avatar {
+    width: 40px; height: 40px; border-radius: 50%; background: var(--panel-raised);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px;
+    color: var(--signal); flex-shrink: 0;
+  }
+  .contact-row { display: flex; align-items: center; gap: 12px; }
+  .contact-meta { flex: 1; min-width: 0; }
+  .contact-meta .name { font-size: 14.5px; font-weight: 700; }
+  .contact-meta .sub { font-size: 12px; color: var(--text-dim); }
+  .icon-btn {
+    background: none; border: none; color: var(--text-faint); font-size: 18px; cursor: pointer;
+    padding: 6px;
+  }
+
+  .loading-inline { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); padding: 14px 0; }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--line);
+    border-top-color: var(--signal); animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .settings-group { margin-bottom: 24px; }
+  .kv-row { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-row .k { color: var(--text-dim); }
+  .kv-row .v { font-family: var(--mono); font-size: 12px; color: var(--text); text-align: right; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  ::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body>
+
+<div id="toastHost"></div>
+
+<div class="topbar" id="topbar" style="display:none;">
+  <div class="wordmark"><span class="dot"></span>Safe Route</div>
+  <div class="screen-title" id="screenTitle"></div>
+</div>
+
+<main id="main"></main>
+
+<div class="bottomnav" id="bottomnav" style="display:none;">
+  <button class="navbtn" data-tab="home"><span class="ic">🗺️</span>Trajets</button>
+  <button class="navbtn" data-tab="track"><span class="ic">📍</span>Tracking</button>
+  <button class="navbtn" data-tab="contacts"><span class="ic">👥</span>Contacts</button>
+  <button class="navbtn" data-tab="settings"><span class="ic">⚙️</span>Réglages</button>
+</div>
+
+<script>
+"use strict";
+
+// =====================================================================
+// STATE
+// =====================================================================
+const S = {
+  baseUrl: localStorage.getItem("sr_base_url") || "",
+  token: localStorage.getItem("sr_token") || "",
+  refreshToken: localStorage.getItem("sr_refresh") || "",
+  deviceId: localStorage.getItem("sr_device_id") || null,
+  profile: JSON.parse(localStorage.getItem("sr_profile") || "null"),
+  tab: "home",
+  authMode: "login",
+  routes: [],
+  contacts: [],
+  activeSession: JSON.parse(localStorage.getItem("sr_session") || "null"), // {session_id, route_id, route_name}
+  recording: { active: false, points: [], watchId: null, lastPoint: null },
+  tracking: { watchId: null, buffer: [], uploadTimer: null, lastResult: null, lastPointAt: null, sending: false }
+};
+
+if (!S.deviceId) {
+  S.deviceId = "dev-" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  localStorage.setItem("sr_device_id", S.deviceId);
+}
+
+function persist() {
+  localStorage.setItem("sr_base_url", S.baseUrl);
+  localStorage.setItem("sr_token", S.token);
+  localStorage.setItem("sr_refresh", S.refreshToken);
+  localStorage.setItem("sr_profile", JSON.stringify(S.profile));
+  localStorage.setItem("sr_session", JSON.stringify(S.activeSession));
+}
+
+// =====================================================================
+// TOAST
+// =====================================================================
+function toast(msg, kind) {
+  const host = document.getElementById("toastHost");
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => { el.style.transition = "opacity .3s"; el.style.opacity = "0"; setTimeout(() => el.remove(), 300); }, 3400);
+}
+
+// =====================================================================
+// API WRAPPER
+// =====================================================================
+async function api(path, { method = "GET", body = null, headers = {}, auth = true } = {}) {
+  if (!S.baseUrl) { toast("Configure l'URL du serveur dans Réglages d'abord.", "error"); throw new Error("no_base_url"); }
+  const finalHeaders = { "Content-Type": "application/json", ...headers };
+  if (auth && S.token) finalHeaders["Authorization"] = "Bearer " + S.token;
+
+  let res;
+  try {
+    res = await fetch(S.baseUrl.replace(/\/+$/, "") + path, {
+      method,
+      headers: finalHeaders,
+      body: body !== null ? JSON.stringify(body) : undefined
+    });
+  } catch (e) {
+    toast("Connexion au serveur impossible. Vérifie l'URL et ta connexion.", "error");
+    throw e;
+  }
+
+  let data = null;
+  const text = await res.text();
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+
+  if (res.status === 401 && auth) {
+    logout();
+    toast("Session expirée, reconnecte-toi.", "error");
+    throw new Error("unauthorized");
+  }
+
+  if (!res.ok) {
+    const msg = (data && data.detail) ? data.detail : `Erreur ${res.status}`;
+    toast(msg, "error");
+    const err = new Error(msg);
+    err.data = data;
+    err.status = res.status;
+    throw err;
+  }
+
+  return data;
+}
+
+function logout() {
+  S.token = ""; S.refreshToken = ""; S.profile = null; S.activeSession = null;
+  stopTrackingLoop(); stopRecording();
+  persist();
+  render();
+}
+
+// =====================================================================
+// GEO HELPERS
+// =====================================================================
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function getCurrentPosition(opts) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("Géolocalisation non supportée par ce navigateur.")); return; }
+    navigator.geolocation.getCurrentPosition(resolve, reject, opts || { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
+  });
+}
+
+// =====================================================================
+// RENDER ROOT
+// =====================================================================
+function render() {
+  const main = document.getElementById("main");
+  const topbar = document.getElementById("topbar");
+  const bottomnav = document.getElementById("bottomnav");
+
+  if (!S.baseUrl) {
+    topbar.style.display = "none"; bottomnav.style.display = "none";
+    main.className = "no-nav";
+    main.innerHTML = renderFirstRunSetup();
+    bindFirstRunSetup();
+    return;
+  }
+
+  if (!S.token) {
+    topbar.style.display = "none"; bottomnav.style.display = "none";
+    main.className = "no-nav";
+    main.innerHTML = renderAuth();
+    bindAuth();
+    return;
+  }
+
+  if (!S.profile) {
+    topbar.style.display = "flex"; document.getElementById("screenTitle").textContent = "Profil";
+    bottomnav.style.display = "none";
+    main.className = "no-nav";
+    main.innerHTML = renderProfileSetup();
+    bindProfileSetup();
+    return;
+  }
+
+  topbar.style.display = "flex";
+  bottomnav.style.display = "flex";
+  main.className = "";
+
+  document.querySelectorAll(".navbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === S.tab));
+  const titles = { home: "Trajets", track: "Tracking", contacts: "Contacts d'urgence", settings: "Réglages" };
+  document.getElementById("screenTitle").textContent = titles[S.tab] || "";
+
+  if (S.tab === "home") { main.innerHTML = renderHome(); bindHome(); }
+  else if (S.tab === "track") { main.innerHTML = renderTrack(); bindTrack(); }
+  else if (S.tab === "contacts") { main.innerHTML = renderContacts(); bindContacts(); }
+  else if (S.tab === "settings") { main.innerHTML = renderSettings(); bindSettings(); }
+}
+
+document.querySelectorAll(".navbtn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (S.recording.active) { toast("Termine l'enregistrement du trajet avant de changer d'onglet.", "error"); return; }
+    S.tab = btn.dataset.tab;
+    render();
+  });
+});
+
+// =====================================================================
+// FIRST RUN — SERVER URL
+// =====================================================================
+function renderFirstRunSetup() {
+  return `
+    <div class="auth-wrap">
+      <div class="auth-hero">
+        <div class="glyph">🧭</div>
+        <h1>Safe Route</h1>
+        <p>Avant de commencer, indique l'adresse de ton serveur (l'API Safe Route Tracker que tu as déployée).</p>
+      </div>
+      <div class="field">
+        <label>URL du serveur</label>
+        <input type="text" id="setupUrl" placeholder="https://mon-api.onrender.com" autocapitalize="off" autocorrect="off">
+      </div>
+      <button class="btn primary" id="setupSaveBtn">Continuer</button>
+      <p style="font-size:12px;color:var(--text-faint);margin-top:14px;text-align:center;">Modifiable à tout moment depuis Réglages.</p>
+    </div>`;
+}
+function bindFirstRunSetup() {
+  document.getElementById("setupSaveBtn").addEventListener("click", () => {
+    const v = document.getElementById("setupUrl").value.trim().replace(/\/+$/, "");
+    if (!v) { toast("Entre une URL valide.", "error"); return; }
+    S.baseUrl = v; persist(); render();
+  });
+}
+
+// =====================================================================
+// AUTH
+// =====================================================================
+function renderAuth() {
+  return `
+    <div class="auth-wrap">
+      <div class="auth-hero">
+        <div class="glyph">🧭</div>
+        <h1>Safe Route</h1>
+        <p>Suis tes trajets, alerte tes proches en cas de déviation.</p>
+      </div>
+      <div class="auth-tabs">
+        <div class="auth-tab ${S.authMode === 'login' ? 'active' : ''}" data-mode="login">Connexion</div>
+        <div class="auth-tab ${S.authMode === 'register' ? 'active' : ''}" data-mode="register">Créer un compte</div>
+      </div>
+      <div class="field"><label>Email</label><input type="email" id="authEmail" autocapitalize="off" autocorrect="off" placeholder="toi@exemple.com"></div>
+      <div class="field"><label>Mot de passe</label><input type="password" id="authPassword" placeholder="••••••••"></div>
+      <button class="btn primary" id="authSubmitBtn">${S.authMode === 'login' ? 'Se connecter' : 'Créer mon compte'}</button>
+      <p style="font-size:11.5px;color:var(--text-faint);margin-top:16px;text-align:center;">Serveur : ${S.baseUrl}</p>
+      <div style="text-align:center;margin-top:6px;"><button class="link-btn" id="changeServerBtn">Changer de serveur</button></div>
+    </div>`;
+}
+function bindAuth() {
+  document.querySelectorAll(".auth-tab").forEach(t => t.addEventListener("click", () => { S.authMode = t.dataset.mode; render(); }));
+  document.getElementById("changeServerBtn").addEventListener("click", () => { S.baseUrl = ""; persist(); render(); });
+  document.getElementById("authSubmitBtn").addEventListener("click", async () => {
+    const email = document.getElementById("authEmail").value.trim();
+    const password = document.getElementById("authPassword").value;
+    if (!email || !password) { toast("Email et mot de passe requis.", "error"); return; }
+    const btn = document.getElementById("authSubmitBtn");
+    btn.disabled = true; btn.textContent = "Patiente…";
+    try {
+      if (S.authMode === "register") {
+        await api("/auth/register", { method: "POST", body: { email, password }, auth: false });
+        toast("Compte créé, connecte-toi maintenant.", "success");
+        S.authMode = "login"; render();
+      } else {
+        const data = await api("/auth/login", { method: "POST", body: { email, password }, auth: false });
+        S.token = data.access_token; S.refreshToken = data.refresh_token || "";
+        persist();
+        await loadProfileThen();
+      }
+    } catch (e) { /* toast already shown */ }
+    finally { btn.disabled = false; btn.textContent = S.authMode === 'login' ? 'Se connecter' : 'Créer mon compte'; }
+  });
+}
+
+async function loadProfileThen() {
+  try {
+    const data = await api("/profile/me");
+    S.profile = data.profile;
+  } catch (e) {
+    S.profile = null; // pas de profil -> onboarding
+  }
+  persist();
+  render();
+}
+
+// =====================================================================
+// PROFILE SETUP
+// =====================================================================
+function renderProfileSetup() {
+  return `
+    <h1 class="page-title">Ton profil</h1>
+    <p class="page-sub">Nécessaire pour créer des trajets et ajouter des contacts d'urgence.</p>
+    <div class="field"><label>Nom complet</label><input type="text" id="pFullName" placeholder="Jean Dupont"></div>
+    <div class="field"><label>Téléphone</label><input type="tel" id="pPhone" placeholder="+33612345678"></div>
+    <div class="field"><label>Âge</label><input type="number" id="pAge" placeholder="25"></div>
+    <button class="btn primary" id="pSaveBtn">Créer mon profil</button>
+    <div style="text-align:center;margin-top:16px;"><button class="link-btn" id="pLogoutBtn">Se déconnecter</button></div>`;
+}
+function bindProfileSetup() {
+  document.getElementById("pLogoutBtn").addEventListener("click", logout);
+  document.getElementById("pSaveBtn").addEventListener("click", async () => {
+    const full_name = document.getElementById("pFullName").value.trim();
+    const phone_number = document.getElementById("pPhone").value.trim();
+    const age = parseInt(document.getElementById("pAge").value, 10);
+    if (!full_name || !phone_number || !age) { toast("Remplis tous les champs.", "error"); return; }
+    const btn = document.getElementById("pSaveBtn");
+    btn.disabled = true; btn.textContent = "Création…";
+    try {
+      await api("/profile/create", { method: "POST", body: { full_name, phone_number, age } });
+      await loadProfileThen();
+      toast("Profil créé.", "success");
+    } catch (e) {}
+    finally { btn.disabled = false; btn.textContent = "Créer mon profil"; }
+  });
+}
+
+// =====================================================================
+// HOME — ROUTES
+// =====================================================================
+function renderHome() {
+  if (S.recording.active) return renderRecordingScreen();
+
+  return `
+    ${S.activeSession ? `
+      <div class="card" style="border-color:var(--signal-dim);background:linear-gradient(180deg, var(--signal-dim), var(--panel));">
+        <div class="card-row">
+          <div><p class="card-title">Session active</p><p class="card-sub">${escapeHtml(S.activeSession.route_name || 'Trajet')}</p></div>
+          <span class="pulse-dot"></span>
+        </div>
+        <div style="margin-top:10px;"><button class="btn primary" id="goToActiveBtn">Voir le tracking en direct</button></div>
+      </div>` : ``}
+
+    <div class="section-label">Mes trajets</div>
+    <div id="routesList"><div class="loading-inline"><div class="spinner"></div>Chargement des trajets…</div></div>
+
+    <button class="btn ghost" id="newRouteBtn" style="margin-top:6px;">+ Enregistrer un nouveau trajet</button>
+  `;
+}
+
+function routeCardHtml(r) {
+  return `
+    <div class="card" data-route-id="${r.id}">
+      <div class="card-row">
+        <div>
+          <p class="card-title">${escapeHtml(r.name)}</p>
+          <p class="card-sub">Créé le ${new Date(r.created_at).toLocaleDateString('fr-FR')}</p>
+        </div>
+        <span class="badge ${r.is_sensitive ? 'sensitive' : 'normal'}">${r.is_sensitive ? 'Sensible' : 'Standard'}</span>
+      </div>
+      <div style="margin-top:12px;"><button class="btn amber start-track-btn" data-route-id="${r.id}" data-route-name="${escapeHtml(r.name)}" ${S.activeSession ? 'disabled' : ''}>Démarrer le tracking</button></div>
+    </div>`;
+}
+
+async function loadRoutes() {
+  try {
+    const data = await api("/routes/list");
+    S.routes = data.routes || [];
+  } catch (e) { S.routes = []; }
+  const el = document.getElementById("routesList");
+  if (!el) return;
+  if (!S.routes.length) {
+    el.innerHTML = `<div class="empty">Aucun trajet pour l'instant.<br>Enregistre ton premier trajet en te déplaçant avec ton téléphone.</div>`;
+  } else {
+    el.innerHTML = S.routes.map(routeCardHtml).join("");
+  }
+  document.querySelectorAll(".start-track-btn").forEach(b => b.addEventListener("click", () => startTrackingFlow(b.dataset.routeId, b.dataset.routeName)));
+}
+
+function bindHome() {
+  if (S.recording.active) { bindRecordingScreen(); return; }
+  loadRoutes();
+  const goBtn = document.getElementById("goToActiveBtn");
+  if (goBtn) goBtn.addEventListener("click", () => { S.tab = "track"; render(); });
+  document.getElementById("newRouteBtn").addEventListener("click", startRecording);
+}
+
+// ---- Route recording (walk it, capture points) ----
+function startRecording() {
+  if (!navigator.geolocation) { toast("Géolocalisation non disponible.", "error"); return; }
+  S.recording = { active: true, points: [], watchId: null, lastPoint: null };
+  render();
+  S.recording.watchId = navigator.geolocation.watchPosition(pos => {
+    const { latitude, longitude } = pos.coords;
+    const last = S.recording.lastPoint;
+    if (!last || haversine(last.latitude, last.longitude, latitude, longitude) >= 6) {
+      const pt = { latitude, longitude, timestamp: new Date().toISOString() };
+      S.recording.points.push(pt);
+      S.recording.lastPoint = pt;
+      updateRecordingUI();
+    }
+  }, err => {
+    toast("Erreur GPS : " + err.message, "error");
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+function stopRecording() {
+  if (S.recording.watchId !== null) navigator.geolocation.clearWatch(S.recording.watchId);
+  S.recording = { active: false, points: [], watchId: null, lastPoint: null };
+}
+function updateRecordingUI() {
+  const countEl = document.getElementById("recPointCount");
+  if (countEl) countEl.textContent = S.recording.points.length;
+}
+function renderRecordingScreen() {
+  return `
+    <div class="signal-stage">
+      <div style="text-align:center;">
+        <span class="pulse-dot"></span><span style="font-size:13px;color:var(--text-dim);">Enregistrement en cours — déplace-toi</span>
+      </div>
+      <div class="rec-points-count" style="font-size:52px;font-weight:800;margin:22px 0 4px 0;color:var(--text);">
+        <span id="recPointCount">${S.recording.points.length}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px;">points capturés</div>
+    </div>
+    <button class="btn primary" id="stopRecBtn">Terminer l'enregistrement</button>
+    <button class="btn ghost" id="cancelRecBtn" style="margin-top:10px;">Annuler</button>
+  `;
+}
+function bindRecordingScreen() {
+  document.getElementById("stopRecBtn").addEventListener("click", () => {
+    if (S.recording.points.length < 2) { toast("Il faut au moins 2 points. Continue de marcher un peu.", "error"); return; }
+    const pts = S.recording.points.slice();
+    if (S.recording.watchId !== null) navigator.geolocation.clearWatch(S.recording.watchId);
+    S.recording.active = false;
+    showSaveRouteForm(pts);
+  });
+  document.getElementById("cancelRecBtn").addEventListener("click", () => {
+    stopRecording(); render();
+  });
+}
+function showSaveRouteForm(points) {
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <h1 class="page-title">Nommer ce trajet</h1>
+    <p class="page-sub">${points.length} points capturés.</p>
+    <div class="field"><label>Nom du trajet</label><input type="text" id="rName" placeholder="Maison → École"></div>
+    <div class="field">
+      <div class="toggle-row">
+        <div><div style="font-weight:600;font-size:13.5px;">Trajet sensible</div><div style="font-size:11.5px;color:var(--text-faint);margin-top:2px;">Active la protection anti-vol au démarrage</div></div>
+        <label class="switch"><input type="checkbox" id="rSensitive"><span class="track"></span></label>
+      </div>
+    </div>
+    <button class="btn primary" id="rSaveBtn">Enregistrer le trajet</button>
+    <button class="btn ghost" id="rDiscardBtn" style="margin-top:10px;">Ne pas enregistrer</button>
+  `;
+  document.getElementById("rDiscardBtn").addEventListener("click", () => { S.recording = { active: false, points: [], watchId: null, lastPoint: null }; render(); });
+  document.getElementById("rSaveBtn").addEventListener("click", async () => {
+    const route_name = document.getElementById("rName").value.trim();
+    const is_sensitive = document.getElementById("rSensitive").checked;
+    if (!route_name) { toast("Donne un nom au trajet.", "error"); return; }
+    const btn = document.getElementById("rSaveBtn");
+    btn.disabled = true; btn.textContent = "Enregistrement…";
+    try {
+      await api("/routes/create", { method: "POST", body: { route_name, is_sensitive, points } });
+      toast("Trajet enregistré.", "success");
+      S.recording = { active: false, points: [], watchId: null, lastPoint: null };
+      render();
+    } catch (e) {}
+    finally { btn.disabled = false; btn.textContent = "Enregistrer le trajet"; }
+  });
+}
+
+// =====================================================================
+// TRACKING — LIVE
+// =====================================================================
+async function startTrackingFlow(routeId, routeName) {
+  if (S.activeSession) { toast("Une session est déjà active.", "error"); return; }
+  toast("Récupération de ta position…");
+  let pos;
+  try { pos = await getCurrentPosition(); }
+  catch (e) { toast("Impossible d'obtenir ta position : " + e.message, "error"); return; }
+
+  try {
+    const data = await api(`/tracking/start/${routeId}`, {
+      method: "POST",
+      headers: {
+        "x-current-lat": String(pos.coords.latitude),
+        "x-current-lng": String(pos.coords.longitude),
+        "device-id": S.deviceId
+      }
+    });
+    S.activeSession = { session_id: data.session_id, route_id: routeId, route_name: routeName };
+    persist();
+    S.tab = "track";
+    render();
+    startTrackingLoop();
+    toast("Tracking démarré.", "success");
+  } catch (e) { /* toast déjà affiché (ex: trop loin du départ) */ }
+}
+
+function startTrackingLoop() {
+  if (!navigator.geolocation || S.tracking.watchId !== null) return;
+  S.tracking.buffer = [];
+  S.tracking.watchId = navigator.geolocation.watchPosition(pos => {
+    const { latitude, longitude } = pos.coords;
+    S.tracking.buffer.push({ latitude, longitude, timestamp: new Date().toISOString() });
+    S.tracking.lastPointAt = Date.now();
+    updateTrackHud();
+  }, err => {
+    toast("Erreur GPS : " + err.message, "error");
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+
+  S.tracking.uploadTimer = setInterval(flushTrackingBuffer, 12000);
+}
+
+function stopTrackingLoop() {
+  if (S.tracking.watchId !== null) { navigator.geolocation.clearWatch(S.tracking.watchId); S.tracking.watchId = null; }
+  if (S.tracking.uploadTimer) { clearInterval(S.tracking.uploadTimer); S.tracking.uploadTimer = null; }
+  S.tracking.buffer = [];
+}
+
+async function flushTrackingBuffer() {
+  if (!S.activeSession || S.tracking.sending || S.tracking.buffer.length === 0) return;
+  const points = S.tracking.buffer.splice(0, 100);
+  S.tracking.sending = true;
+  try {
+    const result = await api(`/tracking/segment/${S.activeSession.session_id}`, { method: "POST", body: { points } });
+    S.tracking.lastResult = result;
+    updateTrackHud();
+  } catch (e) {
+    // erreur déjà toastée (ex: GPS non fiable) — on continue de capter, prochain envoi retentera
+  } finally {
+    S.tracking.sending = false;
+  }
+}
+
+function renderTrack() {
+  if (!S.activeSession) {
+    return `
+      <div class="empty" style="margin-top:40px;">
+        Aucune session de tracking en cours.<br>Lance un trajet depuis l'onglet Trajets pour démarrer le suivi en direct.
+      </div>
+      <button class="btn primary" style="margin-top:18px;" id="goHomeBtn">Voir mes trajets</button>
+    `;
+  }
+
+  const r = S.tracking.lastResult;
+  const score = r ? r.trust_score : 100;
+  const severity = r ? r.severity : null;
+  const paused = r ? r.paused : false;
+
+  const circumference = 2 * Math.PI * 92;
+  const ratio = Math.max(0, Math.min(1, score / 100));
+  const offset = circumference * (1 - ratio);
+  const ringColor = severity === 'emergency' ? 'var(--red)' : severity === 'warning' ? 'var(--amber)' : 'var(--signal)';
+
+  let statusText = "Suivi en direct actif";
+  let statusClass = "";
+  if (paused) { statusText = "En pause (immobile)"; statusClass = "warn"; }
+  else if (severity === 'emergency') { statusText = "Déviation critique détectée"; statusClass = "emergency"; }
+  else if (severity === 'warning') { statusText = "Déviation détectée"; statusClass = "warn"; }
+
+  return `
+    <div class="card" style="text-align:center;">
+      <p class="card-sub" style="margin-bottom:2px;">${escapeHtml(S.activeSession.route_name || 'Trajet')}</p>
+    </div>
+
+    <div class="signal-stage">
+      <div class="ring-wrap">
+        <svg width="210" height="210" viewBox="0 0 210 210">
+          <circle class="ring-bg" cx="105" cy="105" r="92"></circle>
+          <circle class="ring-fg" cx="105" cy="105" r="92"
+            style="stroke:${ringColor};stroke-dasharray:${circumference};stroke-dashoffset:${offset};"></circle>
+        </svg>
+        <div class="ring-center">
+          <div class="score">${score}</div>
+          <div class="score-label">Fiabilité GPS</div>
+        </div>
+      </div>
+      <div class="status-line ${statusClass}"><span class="pulse-dot" style="background:${ringColor};"></span>${statusText}</div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v">${S.tracking.buffer.length}</div><div class="l">Points en attente</div></div>
+      <div class="stat-box"><div class="v">${r ? (r.on_route ? 'Oui' : 'Non') : '—'}</div><div class="l">Sur le trajet</div></div>
+    </div>
+
+    <div class="btn-row" style="margin-top:8px;">
+      <button class="btn danger" id="completeBtn">Terminer</button>
+      <button class="btn ghost" id="forceUploadBtn">Forcer l'envoi</button>
+    </div>
+  `;
+}
+
+function bindTrack() {
+  const goHomeBtn = document.getElementById("goHomeBtn");
+  if (goHomeBtn) { goHomeBtn.addEventListener("click", () => { S.tab = "home"; render(); }); return; }
+
+  if (S.tracking.watchId === null) startTrackingLoop();
+
+  document.getElementById("forceUploadBtn").addEventListener("click", flushTrackingBuffer);
+  document.getElementById("completeBtn").addEventListener("click", async () => {
+    if (!confirm("Terminer la session de tracking ?")) return;
+    await flushTrackingBuffer();
+    try {
+      await api(`/tracking/complete/${S.activeSession.session_id}`, { method: "POST" });
+      toast("Session terminée.", "success");
+    } catch (e) {}
+    stopTrackingLoop();
+    S.activeSession = null;
+    S.tracking.lastResult = null;
+    persist();
+    render();
+  });
+}
+function updateTrackHud() {
+  if (S.tab === "track") render();
+}
+
+// =====================================================================
+// EMERGENCY CONTACTS
+// =====================================================================
+const RELATIONSHIP_LABELS = {
+  mother: "Mère", father: "Père", brother: "Frère", sister: "Sœur",
+  guardian: "Tuteur/Tutrice", uncle: "Oncle", aunt: "Tante",
+  grandmother: "Grand-mère", grandfather: "Grand-père"
+};
+
+function renderContacts() {
+  return `
+    <div class="section-label">Ajouter un contact</div>
+    <div class="card">
+      <div class="field"><label>Nom complet</label><input type="text" id="cName" placeholder="Marie Dupont"></div>
+      <div class="field"><label>Téléphone</label><input type="tel" id="cPhone" placeholder="+33698765432"></div>
+      <div class="field">
+        <label>Lien</label>
+        <select id="cRel">${Object.entries(RELATIONSHIP_LABELS).map(([k,v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+      </div>
+      <button class="btn primary" id="addContactBtn">Ajouter</button>
+      <p style="font-size:11.5px;color:var(--text-faint);margin-top:10px;">Ce contact n'a pas besoin d'avoir l'app : il reçoit un SMS en cas d'alerte.</p>
+    </div>
+
+    <div class="section-label">Mes contacts</div>
+    <div id="contactsList"><div class="loading-inline"><div class="spinner"></div>Chargement…</div></div>
+  `;
+}
+
+function contactCardHtml(c) {
+  const initial = (c.target_full_name || "?").trim().charAt(0).toUpperCase();
+  return `
+    <div class="card contact-row" data-contact-id="${c.id}">
+      <div class="contact-avatar">${initial}</div>
+      <div class="contact-meta">
+        <div class="name">${escapeHtml(c.target_full_name)}</div>
+        <div class="sub">${RELATIONSHIP_LABELS[c.relationship] || c.relationship} · ${escapeHtml(c.target_phone_number)}</div>
+      </div>
+      <span class="badge ${c.target_id ? 'linked' : 'unlinked'}" style="margin-right:6px;">${c.target_id ? "A l'app" : "SMS"}</span>
+      <button class="icon-btn del-contact-btn" data-contact-id="${c.id}">✕</button>
+    </div>`;
+}
+
+async function loadContacts() {
+  try {
+    const data = await api("/emergency-contacts/my-contacts");
+    S.contacts = data.contacts || [];
+  } catch (e) { S.contacts = []; }
+  const el = document.getElementById("contactsList");
+  if (!el) return;
+  if (!S.contacts.length) {
+    el.innerHTML = `<div class="empty">Aucun contact d'urgence.<br>Ajoute au moins un proche pour être prévenu·e en cas de déviation.</div>`;
+  } else {
+    el.innerHTML = S.contacts.map(contactCardHtml).join("");
+  }
+  document.querySelectorAll(".del-contact-btn").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Supprimer ce contact ?")) return;
+    try {
+      await api(`/emergency-contacts/${b.dataset.contactId}`, { method: "DELETE" });
+      toast("Contact supprimé.", "success");
+      loadContacts();
+    } catch (e) {}
+  }));
+}
+
+function bindContacts() {
+  loadContacts();
+  document.getElementById("addContactBtn").addEventListener("click", async () => {
+    const full_name = document.getElementById("cName").value.trim();
+    const phone_number = document.getElementById("cPhone").value.trim();
+    const relationship = document.getElementById("cRel").value;
+    if (!full_name || !phone_number) { toast("Nom et téléphone requis.", "error"); return; }
+    const btn = document.getElementById("addContactBtn");
+    btn.disabled = true; btn.textContent = "Ajout…";
+    try {
+      await api("/emergency-contacts/add", { method: "POST", body: { full_name, phone_number, relationship } });
+      toast("Contact ajouté.", "success");
+      document.getElementById("cName").value = ""; document.getElementById("cPhone").value = "";
+      loadContacts();
+    } catch (e) {}
+    finally { btn.disabled = false; btn.textContent = "Ajouter"; }
+  });
+}
+
+// =====================================================================
+// SETTINGS
+// =====================================================================
+function renderSettings() {
+  return `
+    <div class="settings-group">
+      <div class="section-label">Serveur</div>
+      <div class="field"><label>URL de l'API</label><input type="text" id="sBaseUrl" value="${escapeAttr(S.baseUrl)}" autocapitalize="off" autocorrect="off"></div>
+      <button class="btn ghost" id="sSaveUrlBtn">Enregistrer l'URL</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="section-label">Compte</div>
+      <div class="card">
+        <div class="kv-row"><span class="k">Nom</span><span class="v">${escapeHtml(S.profile.full_name || '')}</span></div>
+        <div class="kv-row"><span class="k">Téléphone</span><span class="v">${escapeHtml(S.profile.phone_number || '')}</span></div>
+        <div class="kv-row"><span class="k">Âge</span><span class="v">${S.profile.age ?? '—'}</span></div>
+        <div class="kv-row"><span class="k">ID appareil</span><span class="v">${S.deviceId}</span></div>
+      </div>
+      <button class="btn danger" id="sLogoutBtn">Se déconnecter</button>
+    </div>
+
+    <div class="settings-group">
+      <div class="section-label">Notifications push</div>
+      <div class="card">
+        <p class="card-sub" style="margin-bottom:12px;">Enregistre cet appareil pour recevoir les alertes (les vraies notifications push arriveront une fois Firebase branché côté serveur).</p>
+        <button class="btn ghost" id="sRegisterDeviceBtn">Enregistrer cet appareil</button>
+      </div>
+    </div>
+  `;
+}
+function bindSettings() {
+  document.getElementById("sSaveUrlBtn").addEventListener("click", () => {
+    const v = document.getElementById("sBaseUrl").value.trim().replace(/\/+$/, "");
+    if (!v) { toast("URL invalide.", "error"); return; }
+    S.baseUrl = v; persist(); toast("URL mise à jour.", "success");
+  });
+  document.getElementById("sLogoutBtn").addEventListener("click", () => { if (confirm("Se déconnecter ?")) logout(); });
+  document.getElementById("sRegisterDeviceBtn").addEventListener("click", async () => {
+    const platform = /android/i.test(navigator.userAgent) ? "android" : /iphone|ipad|ipod/i.test(navigator.userAgent) ? "ios" : "web";
+    try {
+      await api("/notifications/register-device", { method: "POST", body: { token: S.deviceId, platform } });
+      toast("Appareil enregistré.", "success");
+    } catch (e) {}
+  });
+}
+
+// =====================================================================
+// UTIL
+// =====================================================================
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function escapeAttr(str) { return escapeHtml(str); }
+
+// =====================================================================
+// INIT
+// =====================================================================
+(async function init() {
+  if (S.baseUrl && S.token) {
+    await loadProfileThen();
+  } else {
+    render();
+  }
+})();
+</script>
+</body>
+</html>

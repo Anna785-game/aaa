@@ -1,3 +1,5 @@
+#tracking.py
+
 from typing import Annotated
 
 from fastapi import (
@@ -11,7 +13,7 @@ from fastapi import (
 from ..dependencies import get_current_user
 from ..schemas import TrackSegmentRequest, ResumeTrackingRequest
 
-from ..main import limiter
+from ..limiter import limiter
 from ..services.tracking.tracking_service import (
     start_new_session,
     upload_tracking_segment,
@@ -87,17 +89,16 @@ def start_tracking(
 @router.post("/segment/{session_id}")
 @limiter.limit("20/minute")
 def upload_segment(
-    request_http: Request,
+    request: Request,
     session_id: str,
-    request: TrackSegmentRequest,
+    payload: TrackSegmentRequest,
     current_user=Depends(get_current_user)
 ):
     return upload_tracking_segment(
         session_id,
-        request,
+        payload,
         current_user["user_id"]
     )
-
 
 # =========================
 # RESUME SESSION
@@ -106,17 +107,16 @@ def upload_segment(
 @router.post("/resume/{session_id}")
 @limiter.limit("10/minute")
 def resume_tracking(
-    request_http: Request,
+    request: Request,
     session_id: str,
-    request: ResumeTrackingRequest,
+    payload: ResumeTrackingRequest,
     current_user=Depends(get_current_user)
 ):
     return resume_session(
         session_id,
-        request,
+        payload,
         current_user["user_id"]
     )
-
 
 # =========================
 # COMPLETE SESSION

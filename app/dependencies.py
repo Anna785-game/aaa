@@ -1,3 +1,4 @@
+#dependencies.py
 from fastapi import Header, HTTPException
 from .database import supabase
 

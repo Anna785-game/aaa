@@ -1,8 +1,9 @@
+#notifications.py
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Request
-from ..main import limiter
+from ..limiter import limiter
 from ..database import supabase
 from ..schemas import DeviceTokenRegister
 from ..dependencies import get_current_user
@@ -19,61 +20,30 @@ router = APIRouter(
 @router.post("/register-device")
 @limiter.limit("10/minute")
 def register_device(
-    request_http: Request,
-    request: DeviceTokenRegister,
+    request: Request,
+    payload: DeviceTokenRegister,
     current_user=Depends(get_current_user)
 ):
-
     existing = (
         supabase.table("device_tokens")
         .select("*")
-        .eq("token", request.token)
+        .eq("token", payload.token)
         .execute()
     )
 
-    # -------------------------
-    # UPDATE EXISTING
-    # -------------------------
-
     if existing.data:
-
         supabase.table("device_tokens").update({
-
-            "user_id":
-                current_user["user_id"],
-
-            "platform":
-                request.platform
-
-        }).eq(
-            "token",
-            request.token
-        ).execute()
-
-    # -------------------------
-    # INSERT NEW
-    # -------------------------
-
+            "user_id": current_user["user_id"],
+            "platform": payload.platform
+        }).eq("token", payload.token).execute()
     else:
-
         supabase.table("device_tokens").insert({
-
-            "user_id":
-                current_user["user_id"],
-
-            "token":
-                request.token,
-
-            "platform":
-                request.platform
-
+            "user_id": current_user["user_id"],
+            "token": payload.token,
+            "platform": payload.platform
         }).execute()
 
-    return {
-        "success": True,
-        "message": "Device enregistré."
-    }
-
+    return {"success": True, "message": "Device enregistré."}
 # =========================
 # LIST DEVICES
 # =========================

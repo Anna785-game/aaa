@@ -1,27 +1,16 @@
-import random
-import string
-
-from datetime import (
-    datetime,
-    timedelta,
-    timezone
-)
-
+#emergency_contacts.py
 from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
     Request
 )
-from ..main import limiter
+from ..limiter import limiter
 
 from ..database import supabase
 from ..dependencies import get_current_user
 
-from ..schemas import (
-    EmergencyContactCreate,
-    EmergencyContactConfirm
-)
+from ..schemas import EmergencyContactCreate
 
 router = APIRouter(
     prefix="/emergency-contacts",
@@ -42,26 +31,26 @@ def get_user_profile(user_id: str):
     )
 
     if not response.data:
-
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Profil requis avant "
-                "d'utiliser cette fonctionnalité."
-            )
+            detail="Profil requis avant d'utiliser cette fonctionnalité."
         )
 
     return response.data[0]
 
 
-def generate_code():
+def find_linked_profile_id(phone_number: str):
+    """Si le numéro correspond à un compte existant, on le lie (pour le push).
+    Sinon target_id reste None (contact sans compte)."""
 
-    return ''.join(
-        random.choices(
-            string.digits,
-            k=6
-        )
+    response = (
+        supabase.table("profiles")
+        .select("id")
+        .eq("phone_number", phone_number)
+        .execute()
     )
+
+    return response.data[0]["id"] if response.data else None
 
 # =========================
 # ADD CONTACT
@@ -70,162 +59,63 @@ def generate_code():
 @router.post("/add")
 @limiter.limit("5/minute")
 def add_emergency_contact(
-    request_http: Request,
-    request: EmergencyContactCreate,
+    request: Request,
+    payload: EmergencyContactCreate,
     current_user=Depends(get_current_user)
 ):
 
-    get_user_profile(current_user["user_id"])
+    requester_profile = get_user_profile(current_user["user_id"])
 
-    # FIND TARGET PROFILE
-    target_response = (
-        supabase.table("profiles")
-        .select("*")
-        .eq("full_name", request.full_name)
-        .eq("phone_number", request.phone_number)
-        .execute()
-    )
+    full_name = payload.full_name.strip()
+    phone_number = payload.phone_number.strip()
 
-    if not target_response.data:
+    if not full_name or not phone_number:
         raise HTTPException(
-            status_code=404,
-            detail="Profil introuvable."
+            status_code=400,
+            detail="Nom et téléphone du contact requis."
         )
 
-    target = target_response.data[0]
-
     # BLOCK SELF ADD
-    if target["id"] == current_user["user_id"]:
+    if phone_number == requester_profile["phone_number"]:
         raise HTTPException(
             status_code=400,
             detail="Impossible de s'ajouter soi-même."
         )
 
-    # EXISTING REQUEST
+    # Lien optionnel vers un compte existant (permet le push plus tard)
+    target_id = find_linked_profile_id(phone_number)
+
+    # DÉDOUBLONNAGE
     existing = (
         supabase.table("emergency_contacts")
         .select("*")
         .eq("requester_id", current_user["user_id"])
-        .eq("target_id", target["id"])
+        .eq("target_phone_number", phone_number)
         .execute()
     )
 
     if existing.data:
         raise HTTPException(
             status_code=400,
-            detail="Demande déjà existante."
+            detail="Ce contact existe déjà."
         )
 
-    code = generate_code()
-
-    expires_at = (
-        datetime.now(timezone.utc)
-        + timedelta(minutes=10)
-    ).isoformat()
-
-    supabase.table("emergency_contacts").insert({
+    response = supabase.table("emergency_contacts").insert({
 
         "requester_id": current_user["user_id"],
-        "target_id": target["id"],
-        "relationship": request.relationship,
-        "verification_code": code,
-        "verification_expires_at": expires_at,
-        "status": "pending",
-        "failed_attempts": 0
+        "target_id": target_id,
+        "target_full_name": full_name,
+        "target_phone_number": phone_number,
+        "relationship": payload.relationship,
+        "status": "active"
 
     }).execute()
 
     return {
         "success": True,
-        "message": "Demande envoyée.",
-        "verification_code": code
-    }
-
-# =========================
-# CONFIRM CONTACT
-# =========================
-
-@router.post("/confirm/{request_id}")
-@limiter.limit("10/minute")
-def confirm_contact(
-    request_http: Request,
-    request_id: str,
-    request: EmergencyContactConfirm,
-    current_user=Depends(get_current_user)
-):
-
-    get_user_profile(current_user["user_id"])
-
-    response = (
-        supabase.table("emergency_contacts")
-        .select("*")
-        .eq("id", request_id)
-        .eq("target_id", current_user["user_id"])
-        .execute()
-    )
-
-    if not response.data:
-        raise HTTPException(
-            status_code=404,
-            detail="Demande introuvable."
-        )
-
-    contact = response.data[0]
-
-    if contact["status"] != "pending":
-        raise HTTPException(
-            status_code=400,
-            detail="Demande invalide."
-        )
-
-    # BLOCK BRUTE FORCE
-    if contact.get("failed_attempts", 0) >= 5:
-        raise HTTPException(
-            status_code=429,
-            detail="Trop de tentatives."
-        )
-
-    expires_at = datetime.fromisoformat(
-        contact["verification_expires_at"]
-    )
-
-    if datetime.now(timezone.utc) > expires_at:
-
-        supabase.table("emergency_contacts").update({
-            "status": "expired"
-        }).eq("id", request_id).execute()
-
-        raise HTTPException(
-            status_code=400,
-            detail="Code expiré."
-        )
-
-    # WRONG CODE
-    if request.verification_code != contact["verification_code"]:
-
-        supabase.table("emergency_contacts").update({
-            "failed_attempts":
-                contact["failed_attempts"] + 1
-        }).eq("id", request_id).execute()
-
-        raise HTTPException(
-            status_code=400,
-            detail="Code invalide."
-        )
-
-    # ACCEPT
-    supabase.table("emergency_contacts").update({
-
-        "status": "accepted",
-        "verification_code": None,
-        "verification_expires_at": None,
-        "failed_attempts": 0
-
-    }).eq("id", request_id).execute()
-
-    return {
-        "success": True,
-        "message": "Contact confirmé."
+        "message": "Contact ajouté.",
+        "has_account": target_id is not None,
+        "contact": response.data[0] if response.data else None
     }
 
 # =========================
@@ -243,10 +133,39 @@ def my_contacts(
         supabase.table("emergency_contacts")
         .select("*")
         .eq("requester_id", current_user["user_id"])
-        .eq("status", "accepted")
+        .eq("status", "active")
         .execute()
     )
 
     return {
         "contacts": response.data
+    }
+
+# =========================
+# DELETE CONTACT
+# =========================
+
+@router.delete("/{contact_id}")
+def delete_contact(
+    contact_id: str,
+    current_user=Depends(get_current_user)
+):
+
+    response = (
+        supabase.table("emergency_contacts")
+        .delete()
+        .eq("id", contact_id)
+        .eq("requester_id", current_user["user_id"])
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Contact introuvable."
+        )
+
+    return {
+        "success": True,
+        "deleted": response.data
     }
