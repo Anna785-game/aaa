@@ -136,6 +136,7 @@ def start_new_session(
                 f"Tolérance: {round(tolerance)}m"
             )
         )
+    
     # === SUCCÈS ===
     if route.get("is_sensitive", False):
         record_attempt(user_id, route_id, device_id, success=True)
