@@ -128,9 +128,14 @@ def start_new_session(
             record_attempt(user_id, route_id, device_id, success=False)
         raise HTTPException(
             status_code=400,
-            detail=f"Veuillez vous rapprocher du point de départ ({round(dist_to_start)}m)"
+             detail=(
+                f"Veuillez vous rapprocher du point de départ ({round(dist_to_start)}m). "
+                f"Attendu: {start_point['latitude']},{start_point['longitude']} | "
+                f"Reçu (toi): {current_lat},{current_lng} | "
+                f"Précision GPS: {current_accuracy if current_accuracy is not None else 'inconnue'}m | "
+                f"Tolérance: {round(tolerance)}m"
+            )
         )
-
     # === SUCCÈS ===
     if route.get("is_sensitive", False):
         record_attempt(user_id, route_id, device_id, success=True)
