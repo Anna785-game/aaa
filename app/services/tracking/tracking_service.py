@@ -163,10 +163,9 @@ def start_new_session(
         "session_id": session_id,
         "message": "Session démarrée avec succès"
     }
-
+    
 # UPLOAD SEGMENT (inchangé)
 # =========================
-
 def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_id: str):
     if not request.points:
         raise HTTPException(400, "Segment vide.")

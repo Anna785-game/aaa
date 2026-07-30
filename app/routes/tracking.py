@@ -9,7 +9,6 @@ from fastapi import (
     Header,
     HTTPException
 )
-
 from ..dependencies import get_current_user
 from ..schemas import TrackSegmentRequest, ResumeTrackingRequest
 

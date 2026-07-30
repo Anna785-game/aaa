@@ -89,7 +89,6 @@ def get_route_details(route_id: str, current_user=Depends(get_current_user)):
         "route": response.data[0]
     }
 
-
 # =========================
 # INVERSER UNE ROUTE (créer le trajet retour)
 # =========================
