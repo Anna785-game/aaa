@@ -177,7 +177,9 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
 
     session = get_session(session_id, user_id)
 
-    validate_motion(request.points)
+    request.points, rejected_points = validate_motion(request.points)
+    if not request.points:
+        raise HTTPException(400, "Tous les points du segment sont invalides")
 
     fake_pattern = detect_fake_pattern(request.points)
 
