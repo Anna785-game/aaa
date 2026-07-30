@@ -16,7 +16,6 @@ def serialize_points(points):
 
     return out
 
-
 def calculate_segment_analysis(points, route_points, cfg):
     distances = []
     max_distance = 0.0
@@ -40,13 +39,23 @@ def calculate_segment_analysis(points, route_points, cfg):
         or last_distance > cfg["DANGER"]
     )
 
+    # AVANT : la sévérité exigeait au moins MIN_CRITICAL (3) points hors
+    # zone DANS LE MÊME SEGMENT. Avec peu de points remontés (GPS throttlé,
+    # app en arrière-plan, mauvaise couverture), on pouvait être réellement
+    # loin de la route sans jamais atteindre ce seuil -> aucune alerte.
+    # MAINTENANT : on se base d'abord sur la position la plus récente
+    # (last_distance), qui reflète où l'utilisateur se trouve VRAIMENT
+    # au moment de l'upload, peu importe le nombre de points reçus.
     severity = None
 
-    if critical >= cfg["MIN_CRITICAL"]:
-        if max_distance > cfg["EMERGENCY"] and last_distance > cfg["EMERGENCY"]:
-            severity = "emergency"
-        elif last_distance > cfg["DANGER"]:
-            severity = "warning"
+    if last_distance > cfg["EMERGENCY"]:
+        severity = "emergency"
+    elif last_distance > cfg["DANGER"]:
+        severity = "warning"
+    elif critical >= cfg["MIN_CRITICAL"]:
+        # Conservé : plusieurs points du segment étaient loin de la route,
+        # même si le tout dernier point est repassé proche (ex: retour rapide)
+        severity = "warning"
 
     return {
         "avg_distance": avg_distance,

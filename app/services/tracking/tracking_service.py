@@ -195,8 +195,15 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
         if p.timestamp and p.timestamp > now + timedelta(seconds=30):
             raise HTTPException(400, "Timestamp invalide")
 
-    # Stationary detection
-    stationary = is_stationary(request.points)
+    # === Récupéré une seule fois, réutilisé pour stationary check ET analysis ===
+    route_points = get_route_points(session["route_id"])
+
+    # Stationary detection (avec contexte route pour ne pas masquer une déviation)
+    stationary = is_stationary(
+        request.points,
+        route_points=route_points,
+        danger_threshold=DANGER_THRESHOLD
+    )
     stationary_since = session.get("stationary_since")
 
     if stationary:
@@ -241,8 +248,6 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
     if trust_score < 40:
         raise HTTPException(400, "GPS non fiable")
 
-    route_points = get_route_points(session["route_id"])
-
     analysis = calculate_segment_analysis(
         request.points,
         route_points,
@@ -284,7 +289,6 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
         "on_route": not analysis.get("is_off_route", True),
         "paused": False
     }
-
 
 # =========================
 # RESUME + COMPLETE (inchangés)

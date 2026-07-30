@@ -102,14 +102,38 @@ def remove_duplicate_points(points):
     return cleaned
 
 
-def is_stationary(points):
+def is_stationary(points, route_points=None, danger_threshold=None):
+    """
+    Détermine si l'utilisateur est immobile.
+    IMPORTANT : si on est immobile MAIS loin de la trajectoire, on ne doit
+    PAS le traiter comme "stationary" — sinon le code appelant saute
+    complètement l'analyse de déviation et aucune alerte ne part.
+    On ne renvoie True que si peu de mouvement ET (pas d'info de route
+    OU suffisamment proche de la route).
+    """
     if len(points) < 2:
-        return True
-    total_distance = 0
-    for i in range(1, len(points)):
-        prev = points[i - 1]
-        curr = points[i]
-        total_distance += calculate_distance_meters(
-            prev.latitude, prev.longitude, curr.latitude, curr.longitude
+        moved_enough = False
+    else:
+        total_distance = 0
+        for i in range(1, len(points)):
+            prev = points[i - 1]
+            curr = points[i]
+            total_distance += calculate_distance_meters(
+                prev.latitude, prev.longitude, curr.latitude, curr.longitude
+            )
+        moved_enough = total_distance >= MIN_MOVEMENT_DISTANCE
+
+    if moved_enough:
+        return False
+
+    # Peu ou pas de mouvement : on vérifie si on est loin de la route
+    # avant de confirmer le statut "stationary"
+    if route_points and danger_threshold is not None:
+        last = points[-1]
+        dist_to_route = find_closest_point(
+            (last.latitude, last.longitude), route_points
         )
-    return total_distance < MIN_MOVEMENT_DISTANCE
+        if dist_to_route > danger_threshold:
+            return False  # Immobile mais hors trajectoire -> pas "stationary"
+
+    return True
