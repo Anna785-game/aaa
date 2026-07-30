@@ -41,6 +41,7 @@ def start_tracking(
     # Headers pour la position actuelle (obligatoires)
     x_current_lat: Annotated[str, Header(alias="x-current-lat")] = None,
     x_current_lng: Annotated[str, Header(alias="x-current-lng")] = None,
+    x_current_accuracy: Annotated[str, Header(alias="x-current-accuracy")] = None,
 
     # Device ID
     device_id: Annotated[
@@ -63,7 +64,7 @@ def start_tracking(
     try:
         current_lat = float(x_current_lat.strip())
         current_lng = float(x_current_lng.strip())
-        
+
         # Validation basique des coordonnées
         if not (-90 <= current_lat <= 90) or not (-180 <= current_lng <= 180):
             raise ValueError
@@ -73,12 +74,24 @@ def start_tracking(
             detail="Coordonnées GPS invalides."
         )
 
+    # La précision est optionnelle : si absente ou invalide, on continue
+    # sans elle (tolérance de base appliquée côté service).
+    current_accuracy = None
+    if x_current_accuracy:
+        try:
+            current_accuracy = float(x_current_accuracy.strip())
+            if current_accuracy < 0:
+                current_accuracy = None
+        except ValueError:
+            current_accuracy = None
+
     return start_new_session(
         route_id=route_id,
         user_id=current_user["user_id"],
         device_id=device_id.strip(),
         current_lat=current_lat,
-        current_lng=current_lng
+        current_lng=current_lng,
+        current_accuracy=current_accuracy
     )
 
 

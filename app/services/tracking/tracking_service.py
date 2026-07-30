@@ -50,11 +50,45 @@ logger = logging.getLogger("tracking")
 
 
 # =========================
+# TOLÉRANCE GPS ADAPTATIVE
+# =========================
+
+# Tolérance de base, appliquée quand on ne connaît pas la précision GPS
+# (ou quand elle est déjà meilleure que ce seuil).
+BASE_TOLERANCE_M = 25
+
+# Plafonds : même avec un très mauvais signal GPS, on n'élargit jamais
+# au-delà de ça, pour ne pas ouvrir de faille sur les routes sensibles.
+MAX_TOLERANCE_SENSITIVE_M = 50
+MAX_TOLERANCE_NORMAL_M = 100
+
+
+def compute_start_tolerance(accuracy: float | None, is_sensitive: bool) -> float:
+    """
+    Calcule la tolérance autorisée entre la position actuelle et le point
+    de départ, en tenant compte de la précision GPS rapportée par le device.
+    """
+    cap = MAX_TOLERANCE_SENSITIVE_M if is_sensitive else MAX_TOLERANCE_NORMAL_M
+
+    if accuracy is None:
+        return BASE_TOLERANCE_M
+
+    return min(cap, BASE_TOLERANCE_M + accuracy)
+
+
+# =========================
 # START SESSION (ANTI-VOLEUR)
 # =========================
 
 
-def start_new_session(route_id: str, user_id: str, device_id: str, current_lat: float, current_lng: float):
+def start_new_session(
+    route_id: str,
+    user_id: str,
+    device_id: str,
+    current_lat: float,
+    current_lng: float,
+    current_accuracy: float | None = None
+):
     """
     Démarrage de session avec protection anti-vol pour routes sensibles
     """
@@ -87,7 +121,9 @@ def start_new_session(route_id: str, user_id: str, device_id: str, current_lat: 
         current_lat, current_lng
     )
 
-    if dist_to_start > 25:  # Tolérance de 25 mètres
+    tolerance = compute_start_tolerance(current_accuracy, route.get("is_sensitive", False))
+
+    if dist_to_start > tolerance:
         if route.get("is_sensitive", False):
             record_attempt(user_id, route_id, device_id, success=False)
         raise HTTPException(
@@ -128,7 +164,6 @@ def start_new_session(route_id: str, user_id: str, device_id: str, current_lat: 
         "message": "Session démarrée avec succès"
     }
 
-# =========================
 # UPLOAD SEGMENT (inchangé)
 # =========================
 
