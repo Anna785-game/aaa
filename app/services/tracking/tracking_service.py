@@ -27,7 +27,9 @@ from ..tracking_repository import (
     clean_user_route_sessions,
     auto_pause_session,
     resume_auto_paused_session,
-    update_stationary_state
+    update_stationary_state,
+    get_completed_sessions,
+    get_session_alerts_summary
 )
 
 from ..push_notifications import send_push_notification
@@ -342,3 +344,31 @@ def complete_session(session_id: str, user_id: str):
     clean_user_route_sessions(user_id, session["route_id"])
 
     return {"success": True}
+
+# =========================
+# HISTORIC
+# =========================
+
+def get_history(user_id: str, route_id: str | None = None):
+    sessions = get_completed_sessions(user_id, route_id)
+    result = []
+
+    for s in sessions:
+        started = datetime.fromisoformat(s["started_at"])
+        ended = datetime.fromisoformat(s["ended_at"]) if s.get("ended_at") else None
+        duration = int((ended - started).total_seconds()) if ended else None
+        alerts = get_session_alerts_summary(s["id"])
+
+        result.append({
+            "session_id": s["id"],
+            "route_id": s["route_id"],
+            "route_name": (s.get("routes") or {}).get("route_name"),
+            "started_at": s["started_at"],
+            "ended_at": s.get("ended_at"),
+            "duration_seconds": duration,
+            "last_severity": s.get("last_severity"),
+            "alert_count": alerts["count"],
+            "max_severity": alerts["max_severity"]
+        })
+
+    return result

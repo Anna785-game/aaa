@@ -201,3 +201,36 @@ def clean_user_route_sessions(user_id: str, route_id: str):
         }
     ).execute()
     
+# =========================
+# HISTORY
+# =========================
+
+def get_completed_sessions(user_id: str, route_id: str = None, limit: int = 21):
+    query = supabase.table("tracking_sessions") \
+        .select("id, route_id, started_at, ended_at, last_severity, routes(route_name)") \
+        .eq("user_id", user_id) \
+        .eq("status", "completed") \
+        .order("started_at", desc=True) \
+        .limit(limit)
+
+    if route_id:
+        query = query.eq("route_id", route_id)
+
+    res = query.execute()
+    return res.data or []
+
+
+def get_session_alerts_summary(session_id: str):
+    res = supabase.table("alerts") \
+        .select("severity") \
+        .eq("session_id", session_id) \
+        .execute()
+
+    data = res.data or []
+    max_sev = None
+    if any(a["severity"] == "emergency" for a in data):
+        max_sev = "emergency"
+    elif any(a["severity"] == "warning" for a in data):
+        max_sev = "warning"
+
+    return {"count": len(data), "max_severity": max_sev}

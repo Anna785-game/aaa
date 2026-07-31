@@ -1,13 +1,14 @@
 #tracking.py
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import (
     APIRouter,
     Depends,
     Request,
     Header,
-    HTTPException
+    HTTPException,
+    Query
 )
 from ..dependencies import get_current_user
 from ..schemas import TrackSegmentRequest, ResumeTrackingRequest
@@ -17,7 +18,8 @@ from ..services.tracking.tracking_service import (
     start_new_session,
     upload_tracking_segment,
     resume_session,
-    complete_session
+    complete_session,
+    get_history 
 )
 
 router = APIRouter(
@@ -145,3 +147,15 @@ def complete_tracking(
         session_id,
         current_user["user_id"]
     )
+    
+
+# =========================
+# SESSION HISTORIQUE
+# =========================
+
+@router.get("/history")
+def tracking_history(
+    route_id: Optional[str] = Query(None),
+    current_user=Depends(get_current_user)
+):
+    return {"history": get_history(current_user["user_id"], route_id)}
