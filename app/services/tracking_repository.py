@@ -166,12 +166,13 @@ def save_segment(session_id: str, request, serialized_points, analysis):
 
 def save_alert(session_id: str, message: str, severity: str):
 
-    supabase.table("alerts").insert({
+    res = supabase.table("alerts").insert({
         "session_id": session_id,
         "message": message,
         "severity": severity
     }).execute()
 
+    return res.data[0]["id"] if res.data else None
 
 # =========================
 # DEVICES

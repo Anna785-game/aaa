@@ -172,7 +172,7 @@ def start_new_session(
         "message": "Session démarrée avec succès"
     }
     
-# UPLOAD SEGMENT (inchangé)
+# UPLOAD SEGMENT 
 # =========================
 def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_id: str):
     if not request.points:
@@ -275,14 +275,14 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
 
     if analysis.get("severity"):
         message = f"DÉVIATION ({round(analysis['max_distance'])}m)"
-        save_alert(session_id, message, analysis["severity"])
+        alert_id = save_alert(session_id, message, analysis["severity"])
 
         for device in get_user_devices(user_id):
             token = device.get("token")
             if token:
                 send_push_notification(token, "Safe Route Alert", message)
 
-        notify_emergency_contacts(user_id, message)
+        notify_emergency_contacts(user_id, message, alert_id=alert_id)
 
     return {
         "success": True,

@@ -17,7 +17,8 @@ from .routes import (
     auth,
     notifications,
     emergency_contacts,
-    profile
+    profile,
+    admin
 )
 
 app = FastAPI()
@@ -58,6 +59,7 @@ app.include_router(auth.router)
 app.include_router(notifications.router)
 app.include_router(emergency_contacts.router)
 app.include_router(profile.router)
+app.include_router(admin.router)
 
 # =========================
 # STATIC FILES

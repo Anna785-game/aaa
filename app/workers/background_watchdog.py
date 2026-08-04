@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 
 from ..database import supabase
 from ..services.push_notifications import send_push_notification
-from ..services.emergency_notifications import notify_emergency_contacts
+from ..services.emergency_notifications import notify_emergency_contacts, _get_admin_tokens
 from ..services.tracking_repository import get_user_devices
 
 # =========================
@@ -15,12 +15,14 @@ from ..services.tracking_repository import get_user_devices
 TIMEOUT_MINUTES = 20                    # 20 minutes sans activité = perte de signal
 CHECK_INTERVAL_SECONDS = 60
 MIN_ALERT_INTERVAL_MINUTES = 30         # Anti-spam : max 1 alerte toutes les 30 min
+RELAY_RETRY_MINUTES = 5                 # Relance les SMS en attente après 5 min
 
 logger = logging.getLogger("watchdog")
 logging.basicConfig(level=logging.INFO)
 
+
 # =========================
-# WATCHDOG PRINCIPAL
+# WATCHDOG – PERTE DE SIGNAL
 # =========================
 
 def check_lost_sessions():
@@ -76,8 +78,8 @@ def check_lost_sessions():
 
             # --- Création alerte ---
             message = f"ALERTE : Perte de signal prolongée ({TIMEOUT_MINUTES} minutes sans mise à jour GPS)"
-            
-            supabase.table("alerts").insert({
+
+            alert_res = supabase.table("alerts").insert({
                 "session_id": session_id,
                 "message": message,
                 "severity": "emergency",
@@ -85,14 +87,18 @@ def check_lost_sessions():
                 "last_known_lng": session.get("last_checkpoint_lng")
             }).execute()
 
-            # --- Notifications ---
+            alert_id = alert_res.data[0]["id"] if alert_res.data else None
+
+            # --- Notifications utilisateur ---
             devices = get_user_devices(user_id)
             for device in devices:
                 token = device.get("token")
                 if token:
                     send_push_notification(token, "Emergency Alert", message)
 
-            notify_emergency_contacts(user_id, message)
+            # --- File d'attente admin (SMS) ---
+            if alert_id:
+                notify_emergency_contacts(user_id, message, alert_id=alert_id)
 
             logger.info(f"[WATCHDOG] Emergency → Session {session_id} (user {user_id})")
 
@@ -101,11 +107,51 @@ def check_lost_sessions():
 
 
 # =========================
+# RELANCE DES RELAIS SMS EN ATTENTE
+# =========================
+
+def retry_pending_relays():
+    try:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(minutes=RELAY_RETRY_MINUTES)
+        ).isoformat()
+
+        pending = (
+            supabase.table("sms_relay_queue")
+            .select("*")
+            .eq("status", "pending")
+            .lt("created_at", cutoff)
+            .execute()
+        ).data or []
+
+        for item in pending:
+            for token in _get_admin_tokens():
+                send_push_notification(
+                    token=token,
+                    title="⚠️ Relais SMS toujours en attente",
+                    body=f"{item['contact_name']} ({item['contact_phone']})",
+                    data={
+                        "type": "sms_relay",
+                        "relay_id": item["id"],
+                        "alert_id": item["alert_id"],
+                        "contact_name": item["contact_name"],
+                        "contact_phone": item["contact_phone"],
+                        "message": item["message"]
+                    }
+                )
+            logger.info(f"[WATCHDOG] Relance relais SMS → {item['id']}")
+
+    except Exception as e:
+        logger.error(f"[WATCHDOG ERROR - relay] {e}", exc_info=True)
+
+
+# =========================
 # LANCEMENT
 # =========================
 
 if __name__ == "__main__":
-    logger.info(f"[WATCHDOG] Démarré - Timeout: {TIMEOUT_MINUTES} minutes")
+    logger.info(f"[WATCHDOG] Démarré - Timeout: {TIMEOUT_MINUTES} minutes | Retry relay: {RELAY_RETRY_MINUTES} minutes")
     while True:
         check_lost_sessions()
+        retry_pending_relays()
         time.sleep(CHECK_INTERVAL_SECONDS)

@@ -118,6 +118,7 @@
   .badge.normal { background: var(--panel-raised); color: var(--text-dim); }
   .badge.linked { background: var(--signal-dim); color: var(--signal); }
   .badge.unlinked { background: var(--panel-raised); color: var(--text-faint); }
+  .badge.emergency { background: var(--red-dim); color: var(--red); }
 
   /* ===== FORM ===== */
   .field { margin-bottom: 14px; }
@@ -391,6 +392,34 @@ function getCurrentPosition(opts) {
   });
 }
 
+// Attend une position GPS suffisamment précise avant de la retourner
+// (le tout premier "fix" GPS après ouverture de l'app est souvent imprécis de 30-100m).
+// Garde la meilleure lecture observée pendant maxWait ms, et sort plus tôt
+// dès qu'une précision "desiredAccuracy" (en mètres) est atteinte.
+function getAccuratePosition({ maxWait = 8000, desiredAccuracy = 20 } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("Géolocalisation non supportée par ce navigateur.")); return; }
+    let best = null;
+    let done = false;
+    const finish = (pos) => {
+      if (done) return;
+      done = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timer);
+      if (pos) resolve(pos); else reject(new Error("Position indisponible."));
+    };
+    const watchId = navigator.geolocation.watchPosition(
+      pos => {
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (pos.coords.accuracy <= desiredAccuracy) finish(pos);
+      },
+      err => finish(best),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: maxWait }
+    );
+    const timer = setTimeout(() => finish(best), maxWait);
+  });
+}
+
 // =====================================================================
 // RENDER ROOT
 // =====================================================================
@@ -595,7 +624,11 @@ function routeCardHtml(r) {
         </div>
         <span class="badge ${r.is_sensitive ? 'sensitive' : 'normal'}">${r.is_sensitive ? 'Sensible' : 'Standard'}</span>
       </div>
-      <div style="margin-top:12px;"><button class="btn amber start-track-btn" data-route-id="${r.id}" data-route-name="${escapeHtml(r.name)}" ${S.activeSession ? 'disabled' : ''}>Démarrer le tracking</button></div>
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn amber start-track-btn" data-route-id="${r.id}" data-route-name="${escapeHtml(r.name)}" ${S.activeSession ? 'disabled' : ''} style="flex:1;">Démarrer le tracking</button>
+        <button class="btn ghost reverse-route-btn" data-route-id="${r.id}" title="Créer le trajet retour (sens inverse)" style="flex:0 0 auto;width:auto;padding:15px 16px;">↔</button>
+        <button class="btn ghost history-btn" data-route-id="${r.id}" data-route-name="${escapeHtml(r.name)}" title="Historique de ce trajet" style="flex:0 0 auto;width:auto;padding:15px 16px;">🕘</button>
+      </div>
     </div>`;
 }
 
@@ -612,6 +645,58 @@ async function loadRoutes() {
     el.innerHTML = S.routes.map(routeCardHtml).join("");
   }
   document.querySelectorAll(".start-track-btn").forEach(b => b.addEventListener("click", () => startTrackingFlow(b.dataset.routeId, b.dataset.routeName)));
+  document.querySelectorAll(".reverse-route-btn").forEach(b => b.addEventListener("click", () => reverseRoute(b.dataset.routeId)));
+  document.querySelectorAll(".history-btn").forEach(b => b.addEventListener("click", () => openHistory(b.dataset.routeId, b.dataset.routeName)));
+}
+
+async function reverseRoute(routeId) {
+  try {
+    const data = await api(`/routes/${routeId}/reverse`, { method: "POST" });
+    toast(`Trajet retour créé : ${data.route_name}`, "success");
+    loadRoutes();
+  } catch (e) {}
+}
+
+// ---- Historique d'un trajet ----
+async function openHistory(routeId, routeName) {
+  const main = document.getElementById("main");
+  main.innerHTML = `
+    <h1 class="page-title">Historique</h1>
+    <p class="page-sub">${escapeHtml(routeName)}</p>
+    <div id="historyList"><div class="loading-inline"><div class="spinner"></div>Chargement…</div></div>
+    <button class="btn ghost" id="historyBackBtn" style="margin-top:14px;">Retour</button>
+  `;
+  document.getElementById("historyBackBtn").addEventListener("click", render);
+
+  try {
+    const data = await api(`/tracking/history?route_id=${encodeURIComponent(routeId)}`);
+    const list = data.history || [];
+    const el = document.getElementById("historyList");
+    el.innerHTML = list.length
+      ? list.map(historyItemHtml).join("")
+      : `<div class="empty">Aucun trajet terminé pour l'instant.</div>`;
+  } catch (e) {
+    const el = document.getElementById("historyList");
+    if (el) el.innerHTML = `<div class="empty">Impossible de charger l'historique.</div>`;
+  }
+}
+
+function historyItemHtml(h) {
+  const started = new Date(h.started_at);
+  const mins = h.duration_seconds !== null && h.duration_seconds !== undefined ? Math.round(h.duration_seconds / 60) : null;
+  const sev = h.max_severity;
+  const badgeClass = sev === 'emergency' ? 'emergency' : sev === 'warning' ? 'sensitive' : 'normal';
+  const badgeText = sev === 'emergency' ? 'Urgence' : sev === 'warning' ? 'Alerte' : 'RAS';
+  return `
+    <div class="card">
+      <div class="card-row">
+        <div>
+          <p class="card-title">${started.toLocaleDateString('fr-FR')} · ${started.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}</p>
+          <p class="card-sub">${mins !== null ? mins + ' min' : 'Durée inconnue'} · ${h.alert_count} alerte(s)</p>
+        </div>
+        <span class="badge ${badgeClass}">${badgeText}</span>
+      </div>
+    </div>`;
 }
 
 function bindHome() {
@@ -712,9 +797,9 @@ function showSaveRouteForm(points) {
 // =====================================================================
 async function startTrackingFlow(routeId, routeName) {
   if (S.activeSession) { toast("Une session est déjà active.", "error"); return; }
-  toast("Récupération de ta position…");
+  toast("Récupération de ta position précise…");
   let pos;
-  try { pos = await getCurrentPosition(); }
+  try { pos = await getAccuratePosition(); }
   catch (e) { toast("Impossible d'obtenir ta position : " + e.message, "error"); return; }
 
   try {
@@ -723,6 +808,7 @@ async function startTrackingFlow(routeId, routeName) {
       headers: {
         "x-current-lat": String(pos.coords.latitude),
         "x-current-lng": String(pos.coords.longitude),
+        "x-current-accuracy": String(Math.round(pos.coords.accuracy)),
         "device-id": S.deviceId
       }
     });
@@ -782,7 +868,7 @@ function renderTrack() {
   }
 
   const r = S.tracking.lastResult;
-  const score = r ? r.trust_score : 100;
+  const score = (r && typeof r.trust_score === 'number') ? r.trust_score : (S.tracking.lastResult?.trust_score ?? 100);
   const severity = r ? r.severity : null;
   const paused = r ? r.paused : false;
 

@@ -39,19 +39,6 @@ def get_user_profile(user_id: str):
     return response.data[0]
 
 
-def find_linked_profile_id(phone_number: str):
-    """Si le numéro correspond à un compte existant, on le lie (pour le push).
-    Sinon target_id reste None (contact sans compte)."""
-
-    response = (
-        supabase.table("profiles")
-        .select("id")
-        .eq("phone_number", phone_number)
-        .execute()
-    )
-
-    return response.data[0]["id"] if response.data else None
-
 # =========================
 # ADD CONTACT
 # =========================
@@ -82,9 +69,6 @@ def add_emergency_contact(
             detail="Impossible de s'ajouter soi-même."
         )
 
-    # Lien optionnel vers un compte existant (permet le push plus tard)
-    target_id = find_linked_profile_id(phone_number)
-
     # DÉDOUBLONNAGE
     existing = (
         supabase.table("emergency_contacts")
@@ -101,22 +85,19 @@ def add_emergency_contact(
         )
 
     response = supabase.table("emergency_contacts").insert({
-
         "requester_id": current_user["user_id"],
-        "target_id": target_id,
         "target_full_name": full_name,
         "target_phone_number": phone_number,
         "relationship": payload.relationship,
         "status": "active"
-
     }).execute()
 
     return {
         "success": True,
         "message": "Contact ajouté.",
-        "has_account": target_id is not None,
         "contact": response.data[0] if response.data else None
     }
+
 
 # =========================
 # MY CONTACTS
@@ -140,6 +121,7 @@ def my_contacts(
     return {
         "contacts": response.data
     }
+
 
 # =========================
 # DELETE CONTACT
