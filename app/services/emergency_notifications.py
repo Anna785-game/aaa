@@ -1,7 +1,7 @@
 #emergency_notifications.py
 from ..database import supabase
 from .push_notifications import send_push_notification
-
+from datetime import datetime, timezone
 
 def _get_admin_tokens():
     res = supabase.table("admin_devices").select("token").execute()
@@ -9,15 +9,16 @@ def _get_admin_tokens():
 
 
 def _queue_sms_relay(alert_id, contact_name, contact_phone, message):
+    now = datetime.now(timezone.utc).isoformat()
     res = supabase.table("sms_relay_queue").insert({
         "alert_id": alert_id,
         "contact_name": contact_name,
         "contact_phone": contact_phone,
         "message": message,
-        "status": "pending"
+        "status": "pending",
+        "last_notified_at": now
     }).execute()
     return res.data[0] if res.data else None
-
 
 def _notify_admin_relay(relay_item):
     payload = {

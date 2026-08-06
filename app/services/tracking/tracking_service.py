@@ -29,7 +29,12 @@ from ..tracking_repository import (
     resume_auto_paused_session,
     update_stationary_state,
     get_completed_sessions,
-    get_session_alerts_summary
+    get_session_alerts_summary,
+    get_completed_sessions,
+    get_session_alerts_summary,
+    get_session_detail,
+    delete_session,
+    get_history_stats
 )
 
 from ..push_notifications import send_push_notification
@@ -273,9 +278,42 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
         new_status="emergency" if analysis.get("severity") == "emergency" else "active"
     )
 
-    if analysis.get("severity"):
+    # =========================================================
+    # RESET si on est revenu clairement sur la route
+    # =========================================================
+    severity = analysis.get("severity")
+    if not analysis.get("is_off_route") and not severity:
+        if session.get("last_severity") is not None:
+            supabase.table("tracking_sessions").update({
+                "last_severity": None,
+                "last_alert_distance": None
+            }).eq("id", session_id).execute()
+
+    # =========================================================
+    # ANTI-SPAM ALERTES
+    # - 1er warning dès DANGER (200 m)
+    # - Nouveau warning seulement si last_distance >= last_alert_distance + 100 m
+    # - Emergency (400 m) : 1 seule fois
+    # =========================================================
+    last_distance = analysis.get("last_distance") or 0.0
+    last_sev = session.get("last_severity")
+    last_alert_dist = session.get("last_alert_distance")
+
+    should_alert = False
+
+    if severity == "emergency":
+        if last_sev != "emergency":
+            should_alert = True
+    elif severity == "warning":
+        if last_sev is None:
+            should_alert = True
+        elif last_sev == "warning" and last_alert_dist is not None:
+            if last_distance >= last_alert_dist + ALERT_DISTANCE_STEP_M:
+                should_alert = True
+
+    if should_alert:
         message = f"DÉVIATION ({round(analysis['max_distance'])}m)"
-        alert_id = save_alert(session_id, message, analysis["severity"])
+        alert_id = save_alert(session_id, message, severity)
 
         for device in get_user_devices(user_id):
             token = device.get("token")
@@ -284,6 +322,12 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
 
         notify_emergency_contacts(user_id, message, alert_id=alert_id)
 
+        # Mémoriser pour le prochain segment
+        supabase.table("tracking_sessions").update({
+            "last_severity": severity,
+            "last_alert_distance": last_distance
+        }).eq("id", session_id).execute()
+
     return {
         "success": True,
         "trust_score": trust_score,
@@ -291,7 +335,7 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
         "on_route": not analysis.get("is_off_route", True),
         "paused": False
     }
-
+    
 # =========================
 # RESUME + COMPLETE (inchangés)
 # =========================
@@ -349,13 +393,28 @@ def complete_session(session_id: str, user_id: str):
 # HISTORIC
 # =========================
 
-def get_history(user_id: str, route_id: str | None = None):
-    sessions = get_completed_sessions(user_id, route_id)
+def get_history(
+    user_id: str,
+    route_id: str | None = None,
+    has_alerts: bool | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None
+):
+    sessions = get_completed_sessions(
+        user_id,
+        route_id=route_id,
+        has_alerts=has_alerts,
+        from_date=from_date,
+        to_date=to_date
+    )
     result = []
 
     for s in sessions:
-        started = datetime.fromisoformat(s["started_at"])
-        ended = datetime.fromisoformat(s["ended_at"]) if s.get("ended_at") else None
+        started = datetime.fromisoformat(s["started_at"].replace("Z", "+00:00"))
+        ended = None
+        if s.get("ended_at"):
+            ended = datetime.fromisoformat(s["ended_at"].replace("Z", "+00:00"))
+
         duration = int((ended - started).total_seconds()) if ended else None
         alerts = get_session_alerts_summary(s["id"])
 
@@ -363,6 +422,7 @@ def get_history(user_id: str, route_id: str | None = None):
             "session_id": s["id"],
             "route_id": s["route_id"],
             "route_name": (s.get("routes") or {}).get("route_name"),
+            "status": s.get("status"),
             "started_at": s["started_at"],
             "ended_at": s.get("ended_at"),
             "duration_seconds": duration,
@@ -372,3 +432,71 @@ def get_history(user_id: str, route_id: str | None = None):
         })
 
     return result
+
+
+def get_session_history_detail(session_id: str, user_id: str):
+    detail = get_session_detail(session_id, user_id)
+    if not detail:
+        raise HTTPException(404, "Session introuvable dans l'historique.")
+
+    session = detail["session"]
+    started = datetime.fromisoformat(session["started_at"].replace("Z", "+00:00"))
+    ended = None
+    if session.get("ended_at"):
+        ended = datetime.fromisoformat(session["ended_at"].replace("Z", "+00:00"))
+
+    duration = int((ended - started).total_seconds()) if ended else None
+
+    # Stats rapides sur les segments
+    max_deviation = 0.0
+    for seg in detail["segments"]:
+        md = seg.get("max_distance_from_route") or 0
+        if md > max_deviation:
+            max_deviation = md
+
+    return {
+        "session_id": session["id"],
+        "route_id": session["route_id"],
+        "route_name": (session.get("routes") or {}).get("route_name"),
+        "is_sensitive": (session.get("routes") or {}).get("is_sensitive", False),
+        "status": session.get("status"),
+        "started_at": session["started_at"],
+        "ended_at": session.get("ended_at"),
+        "duration_seconds": duration,
+        "last_severity": session.get("last_severity"),
+        "max_deviation_meters": round(max_deviation, 1),
+        "alerts": detail["alerts"],
+        "segments": [
+            {
+                "id": s["id"],
+                "start_time": s.get("start_time"),
+                "end_time": s.get("end_time"),
+                "avg_distance_from_route": s.get("avg_distance_from_route"),
+                "max_distance_from_route": s.get("max_distance_from_route"),
+                "points_count": len(s.get("points") or []),
+                # On renvoie les points seulement si besoin côté client
+                "points": s.get("points") or []
+            }
+            for s in detail["segments"]
+        ]
+    }
+
+
+def delete_history_session(session_id: str, user_id: str):
+    deleted = delete_session(session_id, user_id)
+    if not deleted:
+        raise HTTPException(404, "Session introuvable dans l'historique.")
+    return {"success": True, "deleted": deleted}
+
+def get_history_stats_service(
+    user_id: str,
+    route_id: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None
+):
+    return get_history_stats(
+        user_id=user_id,
+        route_id=route_id,
+        from_date=from_date,
+        to_date=to_date
+    )

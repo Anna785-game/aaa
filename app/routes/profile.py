@@ -2,8 +2,10 @@
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException
+    HTTPException,
+    Request
 )
+from ..limiter import limiter
 
 from ..database import supabase
 
@@ -12,13 +14,15 @@ from ..dependencies import (
 )
 
 from ..schemas import (
-    ProfileCreate
+    ProfileCreate,
+    ProfileUpdate
 )
 
 router = APIRouter(
     prefix="/profile",
     tags=["Profile"]
 )
+
 
 # =========================
 # CREATE PROFILE
@@ -71,7 +75,7 @@ def create_profile(
         .select("*")
         .eq(
             "phone_number",
-            request.phone_number
+            request.phone_number.strip()
         )
         .execute()
     )
@@ -112,6 +116,7 @@ def create_profile(
         "profile": response.data
     }
 
+
 # =========================
 # MY PROFILE
 # =========================
@@ -140,4 +145,125 @@ def my_profile(
 
     return {
         "profile": response.data[0]
+    }
+
+
+# =========================
+# UPDATE PROFILE
+# =========================
+
+@router.put("/me")
+@limiter.limit("10/minute")
+def update_profile(
+    request: Request,
+    payload: ProfileUpdate,
+    current_user=Depends(get_current_user)
+):
+    # Vérifie que le profil existe
+    existing = (
+        supabase.table("profiles")
+        .select("*")
+        .eq("id", current_user["user_id"])
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Profil introuvable."
+        )
+
+    current_profile = existing.data[0]
+    updates = {}
+
+    # --- Nom ---
+    if payload.full_name is not None:
+        name = payload.full_name.strip()
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail="Le nom ne peut pas être vide."
+            )
+        updates["full_name"] = name
+
+    # --- Téléphone ---
+    if payload.phone_number is not None:
+        phone = payload.phone_number.strip()
+        if not phone:
+            raise HTTPException(
+                status_code=400,
+                detail="Le numéro de téléphone ne peut pas être vide."
+            )
+
+        # Vérifie unicité uniquement si le numéro change
+        if phone != current_profile["phone_number"]:
+            phone_taken = (
+                supabase.table("profiles")
+                .select("id")
+                .eq("phone_number", phone)
+                .neq("id", current_user["user_id"])
+                .execute()
+            )
+            if phone_taken.data:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Numéro déjà utilisé."
+                )
+
+        updates["phone_number"] = phone
+
+    # --- Âge ---
+    if payload.age is not None:
+        updates["age"] = payload.age
+
+    if not updates:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune modification fournie."
+        )
+
+    response = (
+        supabase.table("profiles")
+        .update(updates)
+        .eq("id", current_user["user_id"])
+        .execute()
+    )
+
+    return {
+        "success": True,
+        "profile": response.data[0] if response.data else None
+    }
+
+
+# =========================
+# DELETE PROFILE
+# =========================
+
+@router.delete("/me")
+@limiter.limit("5/minute")
+def delete_profile(
+    request: Request,
+    current_user=Depends(get_current_user)
+):
+    """
+    Supprime uniquement la ligne dans `profiles`.
+    Le compte auth (email/password) reste intact.
+    L'utilisateur pourra recréer un profil plus tard.
+    """
+    response = (
+        supabase.table("profiles")
+        .delete()
+        .eq("id", current_user["user_id"])
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Profil introuvable."
+        )
+
+    return {
+        "success": True,
+        "message": "Profil supprimé."
     }

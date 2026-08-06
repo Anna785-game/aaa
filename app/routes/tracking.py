@@ -19,7 +19,10 @@ from ..services.tracking.tracking_service import (
     upload_tracking_segment,
     resume_session,
     complete_session,
-    get_history 
+    get_history,
+    get_session_history_detail,
+    delete_history_session, 
+    get_history_stats_service,
 )
 
 router = APIRouter(
@@ -156,6 +159,51 @@ def complete_tracking(
 @router.get("/history")
 def tracking_history(
     route_id: Optional[str] = Query(None),
+    has_alerts: Optional[bool] = Query(None),
+    from_date: Optional[str] = Query(None, description="ISO date, ex: 2026-07-01"),
+    to_date: Optional[str] = Query(None, description="ISO date, ex: 2026-08-01"),
     current_user=Depends(get_current_user)
 ):
-    return {"history": get_history(current_user["user_id"], route_id)}
+    return {
+        "history": get_history(
+            current_user["user_id"],
+            route_id=route_id,
+            has_alerts=has_alerts,
+            from_date=from_date,
+            to_date=to_date
+        )
+    }
+
+
+@router.get("/history/{session_id}")
+def tracking_history_detail(
+    session_id: str,
+    current_user=Depends(get_current_user)
+):
+    return get_session_history_detail(session_id, current_user["user_id"])
+
+
+@router.delete("/history/{session_id}")
+@limiter.limit("10/minute")
+def delete_tracking_history(
+    request: Request,
+    session_id: str,
+    current_user=Depends(get_current_user)
+):
+    return delete_history_session(session_id, current_user["user_id"])
+
+@router.get("/history/stats")
+def tracking_history_stats(
+    route_id: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None, description="ISO date, ex: 2026-07-01"),
+    to_date: Optional[str] = Query(None, description="ISO date, ex: 2026-08-01"),
+    current_user=Depends(get_current_user)
+):
+    return {
+        "stats": get_history_stats_service(
+            current_user["user_id"],
+            route_id=route_id,
+            from_date=from_date,
+            to_date=to_date
+        )
+    }

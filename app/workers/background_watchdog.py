@@ -116,11 +116,14 @@ def retry_pending_relays():
             datetime.now(timezone.utc) - timedelta(minutes=RELAY_RETRY_MINUTES)
         ).isoformat()
 
+        # On ne relance QUE les items dont la dernière notif date de plus
+        # de RELAY_RETRY_MINUTES (pas juste la création) -> évite le spam
+        # à chaque tick du watchdog (60s) une fois le cutoff dépassé.
         pending = (
             supabase.table("sms_relay_queue")
             .select("*")
             .eq("status", "pending")
-            .lt("created_at", cutoff)
+            .lt("last_notified_at", cutoff)
             .execute()
         ).data or []
 
@@ -139,11 +142,17 @@ def retry_pending_relays():
                         "message": item["message"]
                     }
                 )
+
+            # On met à jour last_notified_at pour ne pas re-notifier
+            # avant le prochain intervalle
+            supabase.table("sms_relay_queue").update({
+                "last_notified_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", item["id"]).execute()
+
             logger.info(f"[WATCHDOG] Relance relais SMS → {item['id']}")
 
     except Exception as e:
         logger.error(f"[WATCHDOG ERROR - relay] {e}", exc_info=True)
-
 
 # =========================
 # LANCEMENT
