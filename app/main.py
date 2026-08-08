@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer
 from fastapi.openapi.utils import get_openapi
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import logging
 
 from .limiter import limiter
 from slowapi.middleware import SlowAPIMiddleware
@@ -125,3 +128,14 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+
+logger = logging.getLogger("global_errors")
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Erreur non gérée sur {request.url}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__}
+    )
+

@@ -320,7 +320,11 @@ def upload_tracking_segment(session_id: str, request: TrackSegmentRequest, user_
             if token:
                 send_push_notification(token, "Safe Route Alert", message)
 
-        notify_emergency_contacts(user_id, message, alert_id=alert_id)
+        try:
+            notify_emergency_contacts(user_id, message, alert_id=alert_id)
+        except Exception as e:
+            logger.error(f"[ALERT] Échec notify_emergency_contacts (alert_id={alert_id}): {e}", exc_info=True)
+        # on continue quand même
 
         # Mémoriser pour le prochain segment
         supabase.table("tracking_sessions").update({
